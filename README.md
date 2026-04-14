@@ -1,13 +1,17 @@
-# Boilerplate-Rust
+# gh-sync
 
-![coverage](https://raw.githubusercontent.com/naa0yama/boilerplate-rust/badges/coverage.svg)
-![test execution time](https://raw.githubusercontent.com/naa0yama/boilerplate-rust/badges/time.svg)
+![coverage](https://raw.githubusercontent.com/naa0yama/gh-sync/badges/coverage.svg)
+![test execution time](https://raw.githubusercontent.com/naa0yama/gh-sync/badges/time.svg)
 
-Rust プロジェクトのための開発テンプレート
+upstream テンプレートリポジトリから downstream リポジトリへファイルを同期する CLI ツール
 
 ## 概要
 
-このプロジェクトは、Rust 開発を始めるためのボイラープレートです。Dev Containers に対応しており、VS Code での開発環境が簡単に構築できます。
+`gh-sync` は `boilerplate-rust` などのテンプレートリポジトリで管理されているファイルを、
+downstream (fork) リポジトリへ pull 型で同期する Rust 製 CLI です。
+`GITHUB_TOKEN` のみで動作し、GitHub App や PAT は不要です。
+
+詳細は [`docs/specs/template-sync.ja.md`](docs/specs/template-sync.ja.md) を参照してください。
 
 ## 必要要件
 
@@ -21,16 +25,16 @@ Rust プロジェクトのための開発テンプレート
 
 ```bash
 git clone <repository-url>
-cd boilerplate-rust
+cd gh-sync
 ```
 
-2. VS Codeでプロジェクトを開く:
+2. VS Code でプロジェクトを開く:
 
 ```bash
 code .
 ```
 
-3. VS Codeのコマンドパレット（`Ctrl+Shift+P` / `Cmd+Shift+P`）から「Dev Containers: Reopen in Container」を選択
+3. VS Code のコマンドパレット (`Ctrl+Shift+P` / `Cmd+Shift+P`) から「Dev Containers: Reopen in Container」を選択
 
 ## 使い方
 
@@ -66,12 +70,12 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 
 ```
 .
-├── .cargo/                     # Cargo設定
+├── .cargo/                     # Cargo 設定
 │   └── config.toml
-├── .devcontainer/              # Dev Container設定
-│   ├── devcontainer.json       # Dev Container設定ファイル
-│   ├── initializeCommand.sh    # 初期化コマンド
-│   └── postStartCommand.sh     # 起動後コマンド
+├── .devcontainer/              # Dev Container 設定
+│   ├── devcontainer.json
+│   ├── initializeCommand.sh
+│   └── postStartCommand.sh
 ├── .githooks/                  # Git hooks (mise run 連携)
 │   ├── commit-msg              # Conventional Commits 検証
 │   ├── pre-commit              # コミット前チェック
@@ -79,78 +83,88 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 ├── .github/                    # GitHub Actions & 設定
 │   ├── actions/                # カスタムアクション
 │   ├── infra/                  # gh-infra マニフェスト (リポジトリ設定の宣言的管理)
+│   ├── gh-sync/                # テンプレート同期設定
+│   │   └── config.yaml         # 同期マニフェスト
 │   ├── workflows/              # CI/CD ワークフロー
 │   ├── labeler.yml
-│   ├── project-config.json         # CI/リリース設定 (ビルドターゲット・タイムアウト・apt パッケージ等)
+│   ├── project-config.json     # CI/リリース設定 (ビルドターゲット・タイムアウト等)
 │   └── release.yml
 ├── .mise/                      # mise タスク定義
 │   ├── tasks.toml              # 共通タスク定義 (boilerplate から管理)
 │   └── overrides.toml          # プロジェクト固有のタスク上書き
-├── .vscode/                    # VS Code設定
+├── .vscode/                    # VS Code 設定
 │   ├── launch.json             # デバッグ設定
 │   └── settings.json           # ワークスペース設定
 ├── ast-rules/                  # ast-grep プロジェクトルール
-├── crates/                     # ワークスペースクレート
-│   └── brust/                  # CLI バイナリクレート
+├── crates/                     # ワークスペースクレート (3クレート構成)
+│   ├── gh-sync-manifest/       # 純粋データ型・スキーマ (I/O なし、Miri 対応)
+│   │   ├── src/
+│   │   │   ├── error.rs        # バリデーションエラー型
+│   │   │   ├── manifest.rs     # マニフェストスキーマ・ロード・バリデーション
+│   │   │   ├── strategy.rs     # 戦略結果型
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   ├── gh-sync-engine/         # ビジネスロジック・トレイト (外部バイナリ I/O なし、Miri 対応)
+│   │   ├── src/
+│   │   │   ├── diff.rs         # unified diff 生成
+│   │   │   ├── mode/           # sync / validate / ci-check / patch-refresh モード
+│   │   │   ├── output.rs       # ターミナル・PR 出力フォーマット
+│   │   │   ├── repo/           # GhRepoClient トレイト・API 型
+│   │   │   ├── strategy/       # 戦略実装 (replace / create_only / delete / patch)
+│   │   │   ├── upstream.rs     # upstream フェッチャートレイト
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   └── gh-sync/                # CLI バイナリクレート (gh-sync-manifest + gh-sync-engine を利用)
 │       ├── src/
 │       │   ├── main.rs         # アプリケーションのエントリーポイント
-│       │   ├── libs.rs         # モジュール定義
-│       │   ├── metrics.rs      # OTel メトリクス instruments
-│       │   └── libs/
-│       │       ├── count.rs    # イテレーションカウンターモジュール
-│       │       ├── hello.rs    # Hello モジュール
-│       │       └── http.rs     # HTTP クライアント (OTel メトリクス付き)
+│       │   ├── sync/           # テンプレート同期サブコマンド
+│       │   │   └── runner.rs   # GhRunner トレイト (gh CLI 呼び出し抽象化)
+│       │   └── init/           # init サブコマンド
 │       ├── tests/
 │       │   └── integration_test.rs  # 統合テスト
 │       ├── build.rs            # ビルドスクリプト
 │       └── Cargo.toml          # クレート設定
 ├── docs/                       # ドキュメント
+│   └── specs/
+│       └── template-sync.ja.md # 仕様書
 ├── .editorconfig               # エディター設定
-├── .gitignore                  # Git除外設定
+├── .gitignore                  # Git 除外設定
 ├── .octocov.yml                # カバレッジレポート設定
-├── .tagpr                      # タグ&リリース設定
+├── .tagpr                      # タグ & リリース設定
 ├── Cargo.lock                  # 依存関係のロックファイル
 ├── Cargo.toml                  # ワークスペース設定と共有依存関係
 ├── deny.toml                   # cargo-deny 設定
-├── Dockerfile                  # Dockerイメージ定義
+├── Dockerfile                  # Docker イメージ定義
 ├── dprint.jsonc                # Dprint フォーマッター設定
 ├── LICENSE                     # ライセンスファイル
 ├── mise.toml                   # ツール管理 (タスクは .mise/ を参照)
 ├── README.md                   # このファイル
-├── renovate.json               # Renovate自動依存関係更新設定
+├── renovate.json               # Renovate 自動依存関係更新設定
 ├── rust-toolchain.toml         # Rust toolchain バージョン固定
 └── sgconfig.yml                # ast-grep 設定ファイル
 ```
 
-## VSCode拡張機能
+## VSCode 拡張機能
 
-このプロジェクトの Dev Containers には、Rust開発を効率化する以下の拡張機能が含まれています：
+このプロジェクトの Dev Containers には、Rust 開発を効率化する以下の拡張機能が含まれています:
 
-### Rust開発
+### Rust 開発
 
-- **[rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)** - Rust言語サポート（コード補完、エラー検出、リファクタリング）
-- **[CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)** - Rustプログラムのデバッグサポート
-- **[Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)** - Cargo.tomlファイルのシンタックスハイライトとバリデーション
+- **[rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)** - Rust 言語サポート (コード補完、エラー検出、リファクタリング)
+- **[CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)** - Rust プログラムのデバッグサポート
+- **[Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)** - Cargo.toml ファイルのシンタックスハイライトとバリデーション
 
 ### コード品質・フォーマット
 
-- **[Biome](https://marketplace.visualstudio.com/items?itemName=biomejs.biome)** - 高速なフォーマッターとリンター
-- **[dprint](https://marketplace.visualstudio.com/items?itemName=dprint.dprint)** - 高速なコードフォーマッター（設定ファイル: `dprint.jsonc`）
+- **[dprint](https://marketplace.visualstudio.com/items?itemName=dprint.dprint)** - 高速なコードフォーマッター (設定ファイル: `dprint.jsonc`)
 - **[EditorConfig for VS Code](https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig)** - エディター設定の統一
 - **[Error Lens](https://marketplace.visualstudio.com/items?itemName=usernamehw.errorlens)** - エラーと警告をインラインで表示
 
 ### 開発支援
 
-- **[Claude Code for VSCode](https://marketplace.visualstudio.com/items?itemName=Anthropic.claude-code)** - AIアシスタントによるコーディング支援
-- **[Calculate](https://marketplace.visualstudio.com/items?itemName=acarreiro.calculate)** - 選択したテキストの計算式を評価
+- **[Claude Code for VSCode](https://marketplace.visualstudio.com/items?itemName=Anthropic.claude-code)** - AI アシスタントによるコーディング支援
 - **[indent-rainbow](https://marketplace.visualstudio.com/items?itemName=oderwat.indent-rainbow)** - インデントレベルを色分け表示
 - **[Local History](https://marketplace.visualstudio.com/items?itemName=xyz.local-history)** - ファイルの変更履歴をローカルに保存
-
-### テキスト編集
-
-- **[lowercase](https://marketplace.visualstudio.com/items?itemName=ruiquelhas.vscode-lowercase)** - 選択テキストを小文字に変換
-- **[uppercase](https://marketplace.visualstudio.com/items?itemName=ruiquelhas.vscode-uppercase)** - 選択テキストを大文字に変換
-- **[Markdown All in One](https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one)** - Markdownファイルの編集支援
 
 ## ライセンス
 
@@ -158,9 +172,9 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 
 ### サードパーティライセンスについて
 
-Dev Container の起動時に [OpenObserve Enterprise Edition](https://openobserve.ai/) が自動的にダウンロード・インストールされます。Enterprise 版は MCP (Model Context Protocol) サーバー機能など OSS 版にはない付加機能を備えているため採用しています。Enterprise 版は 200GB/Day のインジェストクォータ内であれば無料で利用できます。
+Dev Container の起動時に [OpenObserve Enterprise Edition](https://openobserve.ai/) が自動的にダウンロード・インストールされます。Enterprise 版は 200GB/Day のインジェストクォータ内であれば無料で利用できます。
 
-OpenObserve Enterprise Edition は [EULA (End User License Agreement)](https://openobserve.ai/enterprise-license/) の下で提供されており、OSS 版 (AGPL-3.0) とはライセンスが異なります。Enterprise 版の機能一覧は [OpenObserve Enterprise](https://openobserve.ai/docs/features/enterprise/) を参照してください。
+OpenObserve Enterprise Edition は [EULA (End User License Agreement)](https://openobserve.ai/enterprise-license/) の下で提供されており、OSS 版 (AGPL-3.0) とはライセンスが異なります。
 
 ## 参考資料
 
@@ -170,8 +184,8 @@ OpenObserve Enterprise Edition は [EULA (End User License Agreement)](https://o
 
 ## Troubleshooting
 
-### Rust debug
+### デバッグ実行
 
 ```bash
-RUST_LOG=trace RUST_BACKTRACE=1 cargo run -- help
+RUST_LOG=trace RUST_BACKTRACE=1 cargo run -- sync --help
 ```

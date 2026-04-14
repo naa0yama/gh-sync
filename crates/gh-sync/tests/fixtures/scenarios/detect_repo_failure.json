@@ -1,0 +1,9 @@
+[
+	{
+		"_comment": "detect_repo: gh repo view fails (not authenticated)",
+		"args": ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+		"exit_code": 1,
+		"stdout": "",
+		"stderr": "You are not logged into any GitHub hosts. To log in, run: gh auth login"
+	}
+]

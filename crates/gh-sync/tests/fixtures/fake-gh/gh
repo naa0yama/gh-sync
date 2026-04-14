@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Fake `gh` CLI for integration tests.
+
+Matches sys.argv[1:] against the "args" field of each entry in the scenario
+file pointed to by GH_FAKE_SCENARIO. Returns the first match's stdout and
+exit_code.
+
+Scenario JSON format (array of request/response pairs):
+  [
+    {
+      "args":      ["api", "repos/owner/repo"],
+      "exit_code": 0,
+      "stdout":    { ... }    // object/array  -> serialized as JSON line
+                              // string        -> written verbatim
+    },
+    ...
+  ]
+
+Notes:
+  - Matching is exact: sys.argv[1:] must equal entry["args"].
+  - The first matching entry wins; later entries with the same args are ignored.
+  - stdin is silently consumed (write operations in --dry-run tests never send
+    real bodies, but callers may still open the stdin pipe).
+  - Captured snapshots document the GitHub API response format that was working
+    at the time they were recorded. Tests that use these fixtures will fail if
+    the parsing code stops handling the recorded format, giving early warning of
+    API compatibility regressions.
+"""
+
+import json
+import os
+import sys
+
+scenario_path = os.environ.get("GH_FAKE_SCENARIO")
+if not scenario_path:
+    print("fake-gh: GH_FAKE_SCENARIO not set", file=sys.stderr)
+    sys.exit(2)
+
+try:
+    with open(scenario_path, encoding="utf-8") as f:
+        scenarios = json.load(f)
+except Exception as exc:
+    print(f"fake-gh: failed to load scenario '{scenario_path}': {exc}", file=sys.stderr)
+    sys.exit(2)
+
+args = sys.argv[1:]
+
+for entry in scenarios:
+    if entry.get("args") == args:
+        stdout_val = entry.get("stdout", "")
+        if isinstance(stdout_val, (dict, list)):
+            sys.stdout.write(json.dumps(stdout_val))
+        else:
+            sys.stdout.write(str(stdout_val))
+        sys.exit(entry.get("exit_code", 0))
+
+print(f"fake-gh: no match for args: {json.dumps(args)}", file=sys.stderr)
+sys.exit(1)

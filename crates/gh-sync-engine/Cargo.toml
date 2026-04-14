@@ -1,0 +1,54 @@
+# - -------------------------------------------------------------------------------------------------
+# - Package
+# -
+[package]
+name = "gh-sync-engine"
+version.workspace = true
+categories = ["command-line-utilities"]
+edition.workspace = true
+keywords = ["cli", "tool", "template", "sync"]
+license.workspace = true
+repository.workspace = true
+description = "Business logic and traits for gh-sync (no CLI, no I/O binaries)"
+
+# - -------------------------------------------------------------------------------------------------
+# - Features
+# -
+[features]
+## Expose mock types for downstream test crates.
+testing = []
+
+# - -------------------------------------------------------------------------------------------------
+# - Dependencies
+# -
+[dependencies]
+# Internal
+gh-sync-manifest.workspace = true
+
+# Core
+anyhow.workspace = true
+
+# Data
+serde.workspace = true
+serde_json.workspace = true
+
+# Filesystem / temp files
+tempfile.workspace = true
+
+# Interactive CLI prompts / ANSI terminal styling
+console.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Dev Dependencies
+# -
+[dev-dependencies]
+tempfile.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Lints
+# -
+[lints]
+workspace = true
