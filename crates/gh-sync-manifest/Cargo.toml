@@ -1,0 +1,33 @@
+# - -------------------------------------------------------------------------------------------------
+# - Package
+# -
+[package]
+name = "gh-sync-manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure data types and schema for gh-sync manifests"
+
+# - -------------------------------------------------------------------------------------------------
+# - Dependencies
+# -
+[dependencies]
+# Core
+anyhow.workspace = true
+
+# Data
+serde.workspace = true
+serde_yml.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Dev Dependencies
+# -
+[dev-dependencies]
+tempfile.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Lints
+# -
+[lints]
+workspace = true
