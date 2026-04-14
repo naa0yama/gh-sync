@@ -1,0 +1,10 @@
+--- a/mise.toml
++++ b/mise.toml
+@@ -1,6 +1,6 @@
+ [env]
+ OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:5080/api/default"
+-RUST_LOG = "warn,brust=trace"
++RUST_LOG = "warn,gh_sync=trace"
+ ## renovate: datasource=github-releases packageName=openobserve/openobserve versioning=semver automerge=true
+ OPENOBSERVE_VERSION = "v0.70.2"
+ ## renovate: datasource=github-releases packageName=babarot/gh-infra versioning=semver automerge=true

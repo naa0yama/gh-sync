@@ -1,0 +1,67 @@
+# - -------------------------------------------------------------------------------------------------
+# - Package
+# -
+[package]
+name = "gh-sync"
+version.workspace = true
+categories = ["command-line-utilities"]
+edition.workspace = true
+keywords = ["cli", "tool", "template", "sync"]
+license.workspace = true
+repository.workspace = true
+description = "Template sync CLI for pulling upstream files into downstream repos"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.gz"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.zip"
+pkg-fmt = "zip"
+
+# - -------------------------------------------------------------------------------------------------
+# - Dependencies
+# -
+[dependencies]
+# Internal
+gh-sync-engine.workspace = true
+gh-sync-manifest.workspace = true
+
+# Core
+anyhow.workspace = true
+clap.workspace = true
+
+# Data
+serde.workspace = true
+serde_yml.workspace = true
+
+# Filesystem / temp files
+tempfile.workspace = true
+
+# Interactive CLI prompts / ANSI terminal styling
+console.workspace = true
+dialoguer.workspace = true
+
+# JSON / API response parsing
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Dev Dependencies
+# -
+[dev-dependencies]
+assert_cmd.workspace = true
+gh-sync-engine = { workspace = true, features = ["testing"] }
+predicates.workspace = true
+tempfile.workspace = true
+
+# - -------------------------------------------------------------------------------------------------
+# - Lints
+# -
+[lints]
+workspace = true
