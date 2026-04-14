@@ -255,7 +255,7 @@ spec:
           contexts:
             - context: CI Gate
               app: github-actions
-            - context: codeql-analyze
+            - context: CodeQL
               app: github-advanced-security
         non_fast_forward: true
         deletion: true
