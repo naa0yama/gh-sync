@@ -287,6 +287,10 @@ mod tests {
         assert!(out.contains("[OK"), "expected OK: {out}");
     }
 
+    #[cfg_attr(
+        miri,
+        ignore = "spawns gh process via maybe_post_pr_comment when GITHUB_ACTIONS is set"
+    )]
     #[test]
     fn replace_drift_returns_failure() {
         // Arrange
@@ -328,6 +332,10 @@ mod tests {
     // delete
     // ------------------------------------------------------------------
 
+    #[cfg_attr(
+        miri,
+        ignore = "spawns gh process via maybe_post_pr_comment when GITHUB_ACTIONS is set"
+    )]
     #[test]
     fn delete_drift_when_file_exists() {
         // Arrange

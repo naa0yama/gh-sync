@@ -722,7 +722,11 @@ mod tests {
     // --- helpers ---
 
     fn manifest_from_yaml(yaml: &str) -> Manifest {
-        serde_yml::from_str(yaml).expect("test YAML should be valid")
+        // Convert to owned String so serde_yml parses from a heap allocation.
+        // Miri's pointer-provenance model rejects libyml's ptr_offset_from
+        // when the input buffer is in the read-only static segment.
+        let owned = yaml.to_owned();
+        serde_yml::from_str(&owned).expect("test YAML should be valid")
     }
 
     fn expect_schema_error(yaml: &str, field: &'static str) {
