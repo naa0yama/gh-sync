@@ -1357,6 +1357,7 @@ spec:
         );
     }
 
+    #[cfg_attr(miri, ignore = "tempfile I/O not supported under Miri")]
     #[test]
     fn test_manifest_load_unknown_field() {
         let dir = TempDir::new().unwrap();

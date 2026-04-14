@@ -1869,6 +1869,7 @@ mod tests {
     // execute_inner (existing tests — behavior unchanged)
     // ------------------------------------------------------------------
 
+    #[cfg_attr(miri, ignore = "tempfile I/O not supported under Miri")]
     #[test]
     fn execute_inner_invalid_manifest_returns_failure_before_api() {
         // An invalid manifest (pattern without '@') must abort before any API call.

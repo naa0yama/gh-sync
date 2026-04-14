@@ -217,10 +217,12 @@ spec:
     selected_actions:
       github_owned_allowed: true
       patterns_allowed:
+        - "actions-rust-lang/setup-rust-toolchain@*"
         - "devcontainers/ci@*"
         - "docker/login-action@*"
         - "jdx/mise-action@*"
         - "k1low/octocov-action@*"
+        - "mozilla-actions/sccache-action@*"
         - "songmu/tagpr@*"
         - "taiki-e/install-action@*"
         - "zizmorcore/zizmor-action@*"

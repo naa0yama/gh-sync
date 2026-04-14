@@ -373,6 +373,7 @@ mod tests {
     // create_only
     // ------------------------------------------------------------------
 
+    #[cfg_attr(miri, ignore = "tempfile I/O not supported under Miri")]
     #[test]
     fn create_only_drift_when_file_missing() {
         // Arrange
