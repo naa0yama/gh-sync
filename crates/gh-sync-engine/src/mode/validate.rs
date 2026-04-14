@@ -123,6 +123,7 @@ files:
     strategy: replace
 ";
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn valid_manifest_returns_success() {
         // Arrange
@@ -170,6 +171,7 @@ files:
         assert!(out.contains("[FAIL"), "missing FAIL tag: {out}");
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn patch_rule_with_existing_file_shows_exists() {
         // Arrange
@@ -198,6 +200,7 @@ files:
         assert!(out.contains("exists"), "missing 'exists' marker: {out}");
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn patch_rule_with_missing_file_returns_failure() {
         // Arrange — patch file does NOT exist
