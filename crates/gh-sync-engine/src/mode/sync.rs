@@ -262,6 +262,10 @@ mod tests {
     // replace strategy
     // ------------------------------------------------------------------
 
+    #[cfg_attr(
+        miri,
+        ignore = "spawns diff process via unified_diff for Changed results"
+    )]
     #[test]
     fn replace_writes_new_file_when_absent() {
         // Arrange
@@ -342,6 +346,10 @@ mod tests {
     // preview is always non-destructive
     // ------------------------------------------------------------------
 
+    #[cfg_attr(
+        miri,
+        ignore = "spawns diff process via unified_diff for Changed results"
+    )]
     #[test]
     fn run_does_not_write_file_without_apply() {
         // Arrange
@@ -411,6 +419,10 @@ mod tests {
     // create_only strategy
     // ------------------------------------------------------------------
 
+    #[cfg_attr(
+        miri,
+        ignore = "spawns diff process via unified_diff for Changed results"
+    )]
     #[test]
     fn create_only_creates_when_absent() {
         // Arrange

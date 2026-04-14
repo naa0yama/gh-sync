@@ -722,11 +722,7 @@ mod tests {
     // --- helpers ---
 
     fn manifest_from_yaml(yaml: &str) -> Manifest {
-        // Convert to owned String so serde_yml parses from a heap allocation.
-        // Miri's pointer-provenance model rejects libyml's ptr_offset_from
-        // when the input buffer is in the read-only static segment.
-        let owned = yaml.to_owned();
-        serde_yml::from_str(&owned).expect("test YAML should be valid")
+        serde_yml::from_str(yaml).expect("test YAML should be valid")
     }
 
     fn expect_schema_error(yaml: &str, field: &'static str) {
@@ -833,6 +829,7 @@ mod tests {
 
     // --- validate_schema: upstream.repo ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_invalid_repo_pattern() {
         expect_schema_error(
@@ -847,6 +844,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_valid_repo_pattern() {
         expect_schema_ok(
@@ -862,6 +860,7 @@ files:
 
     // --- validate_schema: files non-empty ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_empty_rules() {
         expect_schema_error(
@@ -876,6 +875,7 @@ files: []
 
     // --- validate_schema: path constraints ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_path_absolute() {
         expect_schema_error(
@@ -890,6 +890,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_path_dotdot() {
         expect_schema_error(
@@ -906,6 +907,7 @@ files:
 
     // --- validate_schema: duplicate path ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_duplicate_path() {
         expect_schema_error(
@@ -924,6 +926,7 @@ files:
 
     // --- validate_schema: strategy field combinations ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_delete_with_source() {
         expect_schema_error(
@@ -939,6 +942,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_delete_with_patch() {
         expect_schema_error(
@@ -954,6 +958,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_patch_with_source() {
         expect_schema_error(
@@ -969,6 +974,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_replace_with_patch_field() {
         expect_schema_error(
@@ -984,6 +990,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_create_only_with_patch_field() {
         expect_schema_error(
@@ -1001,6 +1008,7 @@ files:
 
     // --- validate_schema: valid full manifest ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_valid_all_strategies() {
         expect_schema_ok(
@@ -1032,6 +1040,7 @@ files:
 
     // --- validate_references ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_references_patch_file_exists() {
         let dir = TempDir::new().unwrap();
@@ -1051,6 +1060,7 @@ files:
         assert!(validate_references(&manifest, dir.path()).is_ok());
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_references_patch_file_missing() {
         let dir = TempDir::new().unwrap();
@@ -1070,6 +1080,7 @@ files:
         assert!(errors.iter().any(|e| e.field == "patch"));
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_references_explicit_patch_path() {
         let dir = TempDir::new().unwrap();
@@ -1092,6 +1103,7 @@ files:
 
     // --- validate_schema: full spec with all new fields ---
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_full_spec_deserialization() {
         let m = manifest_from_yaml(
@@ -1298,6 +1310,7 @@ files:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_pattern_missing_ref_is_error() {
         expect_schema_error_contains(
@@ -1319,6 +1332,7 @@ spec:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_pattern_uppercase_owner_is_error() {
         expect_schema_error_contains(
@@ -1340,6 +1354,7 @@ spec:
         );
     }
 
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
     #[test]
     fn test_schema_pattern_with_wildcard_ref_is_ok() {
         expect_schema_ok(

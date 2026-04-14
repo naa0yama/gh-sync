@@ -219,12 +219,13 @@ spec:
       patterns_allowed:
         - "actions-rust-lang/setup-rust-toolchain@*"
         - "devcontainers/ci@*"
-        - "swatinem/rust-cache@*"
         - "docker/login-action@*"
         - "jdx/mise-action@*"
+        - "k1low/gh-setup@*"
         - "k1low/octocov-action@*"
         - "mozilla-actions/sccache-action@*"
         - "songmu/tagpr@*"
+        - "swatinem/rust-cache@*"
         - "taiki-e/install-action@*"
         - "zizmorcore/zizmor-action@*"
     sha_pinning_required: true
