@@ -146,6 +146,17 @@ fn test_cli_from_upstream_and_select_conflict() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
+fn test_cli_init_with_workflow_in_help() {
+    // --with-workflow flag must appear in init --help
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["init", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("with-workflow"));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
 fn test_cli_validate_missing_manifest() {
     // Validation with a non-existent manifest returns failure
     let mut cmd = cargo_bin_cmd!("gh-sync");

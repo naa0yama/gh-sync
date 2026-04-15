@@ -8,6 +8,8 @@ mod generate;
 pub mod schema;
 /// Interactive file + strategy picker widget.
 mod select;
+/// GitHub Actions workflow template generator.
+pub mod workflow;
 
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::Path;
@@ -217,6 +219,55 @@ pub fn run(
         output_dir.display()
     )
     .context("failed to write to stdout")?;
+
+    // -----------------------------------------------------------------------
+    // 6. Optionally generate the GitHub Actions workflow file
+    // -----------------------------------------------------------------------
+    let emit_workflow = if args.with_workflow {
+        true
+    } else if io::stdin().is_terminal() {
+        dialoguer::Confirm::new()
+            .with_prompt("Generate a GitHub Actions workflow (.github/workflows/gh-sync.yaml)?")
+            .default(true)
+            .interact()
+            .context("workflow prompt cancelled")?
+    } else {
+        false
+    };
+
+    if emit_workflow {
+        let workflow_path = Path::new(workflow::WORKFLOW_PATH);
+        let version = concat!("v", env!("CARGO_PKG_VERSION"));
+
+        if workflow_path.exists() && !args.force {
+            if io::stdin().is_terminal() {
+                let confirmed = dialoguer::Confirm::new()
+                    .with_prompt(format!(
+                        "'{}' already exists. Overwrite?",
+                        workflow_path.display()
+                    ))
+                    .default(false)
+                    .interact()
+                    .context("confirmation prompt cancelled")?;
+                if !confirmed {
+                    writeln!(stdout, "Skipped '{}'.", workflow_path.display())
+                        .context("failed to write to stdout")?;
+                    return Ok(());
+                }
+            } else {
+                anyhow::bail!(
+                    "'{}' already exists; use --force to overwrite",
+                    workflow_path.display()
+                );
+            }
+        }
+
+        // Always pin to `main` in the generated workflow; users can edit afterwards.
+        let upstream_manifest = format!("{repo}@main:.github/gh-sync/config.yaml");
+        workflow::write_workflow_file(workflow_path, version, Some(&upstream_manifest))?;
+        writeln!(stdout, "[OK] created '{}'", workflow_path.display())
+            .context("failed to write to stdout")?;
+    }
 
     Ok(())
 }
