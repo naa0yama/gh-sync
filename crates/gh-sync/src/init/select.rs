@@ -176,6 +176,7 @@ const fn strategy_label(s: Strategy) -> &'static str {
         Strategy::CreateOnly => "create_only",
         Strategy::Delete => "delete     ",
         Strategy::Patch => "patch      ",
+        Strategy::Ignore => "ignore     ",
     }
 }
 
