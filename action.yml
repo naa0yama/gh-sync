@@ -57,7 +57,7 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         VERSION: ${{ inputs.version }}
         TRIPLE: ${{ steps.target.outputs.triple }}
-      run: |
+      run: | # zizmor: ignore[github-env] BIN_DIR derives from RUNNER_TEMP (trusted runner var)
         set -euo pipefail
         DEST="${RUNNER_TEMP}/gh-sync"
         mkdir -p "${DEST}"
