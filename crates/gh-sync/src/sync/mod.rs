@@ -18,6 +18,8 @@ pub mod runner;
 pub mod strategy;
 /// Upstream file fetching via the `gh` CLI
 pub mod upstream;
+/// Parsing and fetching of `--upstream-manifest` references
+pub mod upstream_manifest;
 
 use std::io::{self, IsTerminal as _};
 use std::process::ExitCode;
@@ -48,7 +50,8 @@ fn execute_file(args: &cli::SyncFileArgs) -> ExitCode {
         .and_then(|p| p.parent())
         .unwrap_or_else(|| std::path::Path::new("."));
 
-    if args.validate {
+    // --validate without --upstream-manifest: use the fast file-based path.
+    if args.validate && args.upstream_manifest.is_none() {
         return match mode::validate::run(&args.manifest, repo_root, &mut stdout) {
             Ok(code) => code,
             Err(e) => {
@@ -58,22 +61,38 @@ fn execute_file(args: &cli::SyncFileArgs) -> ExitCode {
         };
     }
 
-    // Load and validate the manifest for all non-validate modes.
-    let manifest = match manifest::Manifest::load(&args.manifest) {
+    // Resolve the effective manifest (upstream fetch + optional local overlay,
+    // or just local file when --upstream-manifest is not given).
+    let fetcher = GhFetcher;
+    let manifest = match upstream_manifest::resolve(
+        args.upstream_manifest.as_deref(),
+        &args.manifest,
+        &fetcher,
+    ) {
         Ok(m) => m,
         Err(e) => {
-            tracing::error!("failed to load manifest: {e}");
+            tracing::error!("failed to resolve manifest: {e:#}");
             tracing::info!("hint: run `gh-sync init` to create a configuration file");
             return ExitCode::FAILURE;
         }
     };
+
+    // --validate with --upstream-manifest: validate the merged manifest.
+    if args.validate {
+        return match mode::validate::run_manifest(&manifest, repo_root, &mut stdout) {
+            Ok(code) => code,
+            Err(e) => {
+                tracing::error!("sync file --validate I/O error: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     if let Err(e) = manifest::validate_schema(&manifest) {
         tracing::error!("manifest validation failed: {e}");
         return ExitCode::FAILURE;
     }
 
-    let fetcher = GhFetcher;
     let patch_runner = RealPatchRunner;
 
     if args.ci_check {

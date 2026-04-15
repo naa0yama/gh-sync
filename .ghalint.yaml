@@ -1,0 +1,9 @@
+excludes:
+  # gh-sync.yaml references naa0yama/gh-sync itself (self-referential); a full
+  # commit SHA cannot be known at generation time because the release has not
+  # been cut yet. Users are expected to pin to the appropriate SHA after
+  # the first release that includes this workflow.
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    workflow_file_path: .github/workflows/gh-sync.yaml
+    job_name: gh-sync-check
+    action_name: naa0yama/gh-sync

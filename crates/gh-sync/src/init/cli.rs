@@ -4,6 +4,8 @@ use clap::Parser;
 
 /// Arguments for the `init` subcommand.
 #[derive(Parser, Debug)]
+// Mode flags map directly to clap boolean arguments; mutual exclusion is enforced by conflicts_with.
+#[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
     /// Upstream repository in `owner/name` format
     #[arg(short = 'r', long = "repo")]
@@ -32,4 +34,8 @@ pub struct InitArgs {
     /// Overwrite an existing config file without prompting
     #[arg(long = "force")]
     pub force: bool,
+
+    /// Also generate a GitHub Actions workflow that calls the gh-sync action
+    #[arg(long = "with-workflow")]
+    pub with_workflow: bool,
 }

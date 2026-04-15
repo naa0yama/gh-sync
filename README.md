@@ -36,6 +36,63 @@ code .
 
 3. VS Code のコマンドパレット (`Ctrl+Shift+P` / `Cmd+Shift+P`) から「Dev Containers: Reopen in Container」を選択
 
+## GitHub Action として使う
+
+`uses: naa0yama/gh-sync@<tag>` で下流リポジトリの CI に組み込めます。
+マニフェストのスキーマ検証 → リポジトリ設定のドリフト検知 → ファイルのドリフト検知を順に実行します。
+
+```yaml
+# .github/workflows/gh-sync.yaml
+name: gh-sync check
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "0 18 * * *" # daily at 03:00 JST
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  gh-sync-check:
+    name: gh-sync-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<sha> # vX.Y.Z
+        with:
+          persist-credentials: false
+      - uses: naa0yama/gh-sync@v0.1.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+`gh-sync init --with-workflow` を実行すると、このワークフロー雛形を `.github/workflows/gh-sync.yaml` として自動生成できます。
+
+マニフェストを upstream リポジトリから取得して使う場合は `upstream-manifest` を指定します。
+ローカルの `manifest` ファイルが存在すれば、同じ `path` のルールで local が上書き (local overlay) されます。
+
+```yaml
+- uses: naa0yama/gh-sync@v0.1.3
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
+    # manifest: .github/gh-sync/config.yaml  # local overlay (省略可)
+```
+
+### inputs
+
+| name                | required | default                       | 説明                                                                         |
+| ------------------- | :------: | ----------------------------- | ---------------------------------------------------------------------------- |
+| `token`             |   yes    | —                             | `gh` CLI 用トークン。`${{ secrets.GITHUB_TOKEN }}` を推奨                    |
+| `version`           |    no    | `github.action_ref`           | ダウンロードするリリースタグ。SHA pin の場合は明示指定が必要                 |
+| `manifest`          |    no    | `.github/gh-sync/config.yaml` | 同期設定ファイルのパス                                                       |
+| `upstream-manifest` |    no    | —                             | upstream マニフェスト参照。`owner/repo@ref:path` 形式。local との merge も可 |
+
 ## 使い方
 
 すべてのタスクは `mise run <task>` で実行します。
@@ -131,6 +188,7 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 ├── .gitignore                  # Git 除外設定
 ├── .octocov.yml                # カバレッジレポート設定
 ├── .tagpr                      # タグ & リリース設定
+├── action.yml                  # GitHub Action 定義 (naa0yama/gh-sync として利用可)
 ├── Cargo.lock                  # 依存関係のロックファイル
 ├── Cargo.toml                  # ワークスペース設定と共有依存関係
 ├── deny.toml                   # cargo-deny 設定

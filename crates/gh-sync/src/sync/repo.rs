@@ -15,10 +15,12 @@ pub use gh_sync_engine::repo::{
     SelectedActionsApi, SpecChange, WorkflowPermissionsApi, apply_changes, compare,
     parse_branch_protection_api, parse_repo_api_data, print_preview,
 };
-use gh_sync_manifest::{Manifest, Spec};
+use gh_sync_manifest::Spec;
 
 use crate::sync::manifest;
 use crate::sync::runner::{GhRunner, SystemGhRunner};
+use crate::sync::upstream::GhFetcher;
+use crate::sync::upstream_manifest;
 
 // ---------------------------------------------------------------------------
 // Production GhRepoClient
@@ -598,22 +600,31 @@ fn execute_inner(
     client: &dyn GhRepoClient,
     w: &mut dyn Write,
 ) -> ExitCode {
-    let manifest = match Manifest::load(&args.manifest) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::error!("failed to load manifest: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Validate schema and local references before making any API calls.
-    // A misconfigured manifest must be caught early to prevent partial apply.
+    // Resolve the directory containing the manifest as the repo root.
     let repo_root = args
         .manifest
         .parent()
         .and_then(|p| p.parent())
         .and_then(|p| p.parent())
         .unwrap_or_else(|| std::path::Path::new("."));
+
+    // Resolve the effective manifest (upstream fetch + optional local overlay,
+    // or just local file when --upstream-manifest is not given).
+    let fetcher = GhFetcher;
+    let manifest = match upstream_manifest::resolve(
+        args.upstream_manifest.as_deref(),
+        &args.manifest,
+        &fetcher,
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!("failed to resolve manifest: {e:#}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Validate schema and local references before making any API calls.
+    // A misconfigured manifest must be caught early to prevent partial apply.
     if let Err(e) = manifest::validate_schema(&manifest) {
         tracing::error!("manifest validation failed: {e}");
         return ExitCode::FAILURE;
@@ -1886,6 +1897,7 @@ mod tests {
         .unwrap();
         let args = super::super::cli::SyncRepoArgs {
             manifest: path,
+            upstream_manifest: None,
             dry_run: false,
             ci_check: false,
             yes: false,
@@ -1913,6 +1925,7 @@ mod tests {
         .unwrap();
         let args = super::super::cli::SyncRepoArgs {
             manifest: path,
+            upstream_manifest: None,
             dry_run: false,
             ci_check: false,
             yes: false,
@@ -1937,6 +1950,7 @@ mod tests {
         .unwrap();
         let args = super::super::cli::SyncRepoArgs {
             manifest: path,
+            upstream_manifest: None,
             dry_run: false,
             ci_check: true,
             yes: false,
@@ -1959,6 +1973,7 @@ mod tests {
         .unwrap();
         let args = super::super::cli::SyncRepoArgs {
             manifest: path,
+            upstream_manifest: None,
             dry_run: true,
             ci_check: false,
             yes: false,

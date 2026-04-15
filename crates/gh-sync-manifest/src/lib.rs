@@ -7,6 +7,8 @@
 pub mod error;
 /// Manifest schema types, loading, and validation.
 pub mod manifest;
+/// Upstream manifest + local overlay merge logic.
+pub mod merge;
 /// Strategy outcome type.
 pub mod strategy;
 
@@ -17,4 +19,5 @@ pub use manifest::{
     Ruleset, RulesetConditions, RulesetRules, SelectedActions, Spec, StatusCheckContext, Strategy,
     Upstream, resolve_patch_path, validate_references, validate_schema,
 };
+pub use merge::merge_overlay;
 pub use strategy::StrategyResult;

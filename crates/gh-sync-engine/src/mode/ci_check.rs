@@ -39,6 +39,10 @@ pub fn run(
     let mut has_error = false;
 
     for rule in &manifest.files {
+        if rule.strategy == Strategy::Ignore {
+            continue;
+        }
+
         let local_path = repo_root.join(&rule.path);
         let local_bytes: Option<Vec<u8>> = std::fs::read(&local_path).ok();
 
@@ -105,6 +109,9 @@ fn evaluate_drift(
     patch_runner: &dyn PatchRunner,
 ) -> (bool, String, String, bool) {
     match rule.strategy {
+        // `Ignore` rules are skipped by the caller before `evaluate_drift` is
+        // invoked; this arm keeps the match exhaustive.
+        Strategy::Ignore => (false, String::from("ignored"), String::new(), false),
         Strategy::Delete => {
             if local_bytes.is_some() {
                 (

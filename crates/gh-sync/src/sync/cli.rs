@@ -24,13 +24,23 @@ pub enum SyncCommand {
 // and mutual exclusion is enforced by `conflicts_with_all`.
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncFileArgs {
-    /// Path to the gh-sync manifest file
+    /// Path to the local gh-sync manifest file (used as overlay when
+    /// --upstream-manifest is also given; may be absent in that case)
     #[arg(
         short = 'm',
         long = "manifest",
         default_value = ".github/gh-sync/config.yaml"
     )]
     pub manifest: PathBuf,
+
+    /// Upstream manifest reference in `owner/repo@ref:path` format.
+    ///
+    /// When given the manifest is fetched from the upstream repository and
+    /// merged with the local manifest (local wins on conflicting paths).
+    /// If the local manifest file does not exist only the upstream manifest
+    /// is used.
+    #[arg(long = "upstream-manifest", value_name = "OWNER/REPO@REF:PATH")]
+    pub upstream_manifest: Option<String>,
 
     /// Show what would change without writing any files
     #[arg(short = 'n', long = "dry-run")]
@@ -57,13 +67,23 @@ pub struct SyncFileArgs {
 #[derive(Parser, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncRepoArgs {
-    /// Path to the gh-sync manifest file
+    /// Path to the local gh-sync manifest file (used as overlay when
+    /// --upstream-manifest is also given; may be absent in that case)
     #[arg(
         short = 'm',
         long = "manifest",
         default_value = ".github/gh-sync/config.yaml"
     )]
     pub manifest: PathBuf,
+
+    /// Upstream manifest reference in `owner/repo@ref:path` format.
+    ///
+    /// When given the manifest is fetched from the upstream repository and
+    /// merged with the local manifest (local wins on conflicting paths).
+    /// If the local manifest file does not exist only the upstream manifest
+    /// is used.
+    #[arg(long = "upstream-manifest", value_name = "OWNER/REPO@REF:PATH")]
+    pub upstream_manifest: Option<String>,
 
     /// Show what would change without applying
     #[arg(short = 'n', long = "dry-run")]

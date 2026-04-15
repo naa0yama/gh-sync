@@ -723,14 +723,15 @@ commit / PR 操作はこのコマンドでは行わない — skill 経由で Cl
 
 ### 5.4 `gh-sync init` フラグ
 
-| フラグ            | 短縮 | 型   | デフォルト                    | 説明                                            |
-| ----------------- | ---- | ---- | ----------------------------- | ----------------------------------------------- |
-| `--repo`          | `-r` | str  | —(TTY の場合はプロンプト)     | upstream リポジトリ(`owner/name` 形式)          |
-| `--ref`           |      | str  | `main`                        | 取得元の git ref                                |
-| `--output`        | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス                                      |
-| `--from-upstream` |      | bool | false                         | upstream 自身の config をコピー(非対話モード可) |
-| `--select`        |      | bool | false                         | upstream のファイル一覧から対話的に選択         |
-| `--force`         |      | bool | false                         | 既存ファイルを確認なしで上書き                  |
+| フラグ            | 短縮 | 型   | デフォルト                    | 説明                                                       |
+| ----------------- | ---- | ---- | ----------------------------- | ---------------------------------------------------------- |
+| `--repo`          | `-r` | str  | —(TTY の場合はプロンプト)     | upstream リポジトリ(`owner/name` 形式)                     |
+| `--ref`           |      | str  | `main`                        | 取得元の git ref                                           |
+| `--output`        | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス                                                 |
+| `--from-upstream` |      | bool | false                         | upstream 自身の config をコピー(非対話モード可)            |
+| `--select`        |      | bool | false                         | upstream のファイル一覧から対話的に選択                    |
+| `--with-workflow` |      | bool | false                         | `.github/workflows/gh-sync.yaml` を同時生成 (詳細は §11.3) |
+| `--force`         |      | bool | false                         | 既存ファイルを確認なしで上書き                             |
 
 `--from-upstream` と `--select` は相互排他。どちらも指定しない場合、TTY であればモード選択プロンプトを表示する。
 
@@ -948,3 +949,190 @@ Run `gh-sync sync` locally to apply upstream changes.
 
 5. **`--patch-refresh` でローカルファイル不在**: upstream との完全差分を patch として生成。
    `strategy: patch` を明示しているのに patch ファイルがないのは作成漏れ。生成して確認・編集できる状態にするのが親切。
+
+---
+
+## 11. GitHub Action
+
+### 11.1 使い方
+
+`action.yml` をリポジトリ直下に配置することで、下流リポジトリから
+`uses: naa0yama/gh-sync@<tag>` の形式で呼び出せる公開 Action として機能する。
+
+実行シーケンス (固定・書き込みなし):
+
+1. `gh-sync sync file --validate` — マニフェストのスキーマ検証 (ローカル、upstream 接続なし)
+2. `gh-sync sync repo --ci-check` — リポジトリ設定のドリフト検知
+3. `gh-sync sync file --ci-check` — ファイルのドリフト検知
+
+いずれかのステップが失敗すると Action は即時 exit 1 する (GitHub Actions のデフォルト fail-fast)。
+ドリフトを **取り込む** 責務は持たず、検知のみ。
+
+### 11.2 inputs
+
+| name                | required | default                       | 説明                                                                       |
+| ------------------- | :------: | ----------------------------- | -------------------------------------------------------------------------- |
+| `token`             |   yes    | —                             | `gh release download` と `gh` CLI 内部で使用するトークン                   |
+| `version`           |    no    | `github.action_ref`           | ダウンロードするリリースタグ (例: `v0.1.3`)。SHA pin 時は明示必須          |
+| `manifest`          |    no    | `.github/gh-sync/config.yaml` | 同期設定ファイルのパス                                                     |
+| `upstream-manifest` |    no    | —                             | upstream マニフェスト参照 (`owner/repo@ref:path` 形式)。詳細は第 12 章参照 |
+
+### 11.3 gh-sync init --with-workflow
+
+`gh-sync init` に `--with-workflow` フラグを追加。config.yaml・schema.json の生成に加えて
+`.github/workflows/gh-sync.yaml` を生成する。
+
+- 非インタラクティブ (`stdin` が TTY でない) 時は `--with-workflow` を明示した場合のみ生成。
+- TTY 時はモード選択後にインタラクティブな確認プロンプトを表示する。
+- 既存ファイルがある場合は `--force` がなければ上書き確認を行う (非 TTY では bail)。
+- 埋め込まれるバージョンは `gh-sync` 実行時の `CARGO_PKG_VERSION` (例: `v0.1.3`)。
+
+```bash
+# 非インタラクティブ例
+gh-sync init --repo naa0yama/boilerplate-rust --from-upstream --with-workflow --force
+```
+
+生成される `.github/workflows/gh-sync.yaml` の内容 (`--repo owner/repo` 指定時):
+
+```yaml
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: gh-sync check
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "0 18 * * *" # daily at 03:00 JST
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  gh-sync-check:
+    name: gh-sync-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<sha> # vX.Y.Z
+        with:
+          persist-credentials: false
+      - uses: naa0yama/gh-sync@<version>
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          upstream-manifest: owner/repo@main:.github/gh-sync/config.yaml
+```
+
+## 12. upstream manifest と local overlay
+
+### 12.1 概要
+
+マニフェストを各 downstream リポジトリに個別に配置するのではなく、
+upstream テンプレートリポジトリ (例: `naa0yama/boilerplate-rust`) で一元管理し、
+downstream は `--upstream-manifest` でそれを参照する構成を取れる。
+
+downstream が特殊なカスタマイズを必要とする場合は、ローカルに overlay マニフェストを
+置くことで upstream の定義を選択的に上書き・除外できる。
+
+### 12.2 upstream manifest 参照形式
+
+```
+owner/repo@ref:path
+```
+
+| 要素         | 説明                                        | 省略時のデフォルト |
+| ------------ | ------------------------------------------- | ------------------ |
+| `owner/repo` | upstream リポジトリ (`owner/name` 形式必須) | —                  |
+| `@ref`       | ブランチ、タグ、またはコミット SHA          | `HEAD`             |
+| `:path`      | リポジトリ内のマニフェストファイルパス      | (省略不可)         |
+
+**例:**
+
+```
+naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
+naa0yama/boilerplate-rust@v1.0.0:.github/gh-sync/config.yaml
+naa0yama/boilerplate-rust:.github/gh-sync/config.yaml  # ref 省略 → HEAD
+```
+
+### 12.3 マニフェスト解決ロジック
+
+1. `--upstream-manifest` が指定された場合:
+   - 指定された参照を `gh api` で取得し、YAML をパースする
+   - `--manifest` に指定されたローカルファイルが存在すれば、`merge_overlay` を適用する
+   - ローカルファイルが存在しない場合は upstream マニフェストをそのまま使用する
+2. `--upstream-manifest` が指定されない場合:
+   - 従来どおり `--manifest` のローカルファイルのみを使用する
+
+### 12.4 マージ規則
+
+`merge_overlay(upstream, local)` の適用規則:
+
+#### `upstream:` ノード
+
+local マニフェストが存在する場合、local の `upstream:` ノードが upstream のものを
+**完全に置換**する。部分マージは行わない。
+
+#### `spec:` ノード
+
+フィールド単位で **local 優先**マージを行う。`Option<T>` フィールドは
+local が `Some` のときのみ上書きし、`None` のときは upstream の値を継承する。
+
+#### `files:` リスト
+
+`path` を key にマージする:
+
+| 状態                              | 結果                                |
+| --------------------------------- | ----------------------------------- |
+| upstream のみに存在               | upstream ルールをそのまま採用       |
+| local のみに存在                  | local ルールを末尾に追加            |
+| 両方に存在                        | local ルールで **完全置換**         |
+| 両方に存在 かつ local が `ignore` | 当該 path をマージ結果から **削除** |
+| local のみに存在 かつ `ignore`    | マージ結果に追加しない (無視)       |
+
+### 12.5 strategy: ignore
+
+`strategy: ignore` は **local overlay 専用**の戦略で、upstream で定義されたルールを
+downstream が明示的に除外するために使う。
+
+```yaml
+# local overlay (.github/gh-sync/config.yaml)
+upstream:
+  repo: naa0yama/boilerplate-rust
+  ref: main
+files:
+  # upstream で定義された Cargo.toml の patch ルールを除外する
+  - path: Cargo.toml
+    strategy: ignore
+  # upstream にないローカル固有のルールを追加
+  - path: .project-config.json
+    strategy: create_only
+```
+
+**制約:**
+
+- `source` フィールドは指定できない (`delete` と同じ制約)
+- `patch` フィールドは指定できない
+- ドリフト検知・sync の両対象から除外される (patch ファイルの存在チェックも対象外)
+
+### 12.6 GitHub Actions での使用例
+
+**純 upstream 動作** (downstream に local manifest なし):
+
+```yaml
+- uses: naa0yama/gh-sync@v0.1.3
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
+```
+
+**local overlay あり** (downstream に上書きルールを定義):
+
+```yaml
+- uses: naa0yama/gh-sync@v0.1.3
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
+    manifest: .github/gh-sync/config.yaml
+```

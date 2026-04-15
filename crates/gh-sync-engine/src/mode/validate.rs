@@ -26,8 +26,24 @@ pub fn run(manifest_path: &Path, repo_root: &Path, w: &mut dyn Write) -> std::io
         }
     };
 
+    run_manifest(&m, repo_root, w)
+}
+
+/// Run manifest validation on a pre-loaded manifest and write results to `w`.
+///
+/// Same as [`run`] but accepts a [`Manifest`] reference directly. Useful when
+/// the manifest has already been fetched and merged (e.g. with
+/// `--upstream-manifest`).
+///
+/// # Errors
+/// Propagates I/O errors from `w`.
+pub fn run_manifest(
+    m: &Manifest,
+    repo_root: &Path,
+    w: &mut dyn Write,
+) -> std::io::Result<ExitCode> {
     // Stage 1 — schema validation
-    let schema_ok = match manifest::validate_schema(&m) {
+    let schema_ok = match manifest::validate_schema(m) {
         Ok(()) => {
             writeln!(w, "{}  YAML syntax valid", StatusTag::Ok.styled())?;
             writeln!(
@@ -69,7 +85,7 @@ pub fn run(manifest_path: &Path, repo_root: &Path, w: &mut dyn Write) -> std::io
     }
 
     // Stage 2 — reference validation
-    let ref_ok = match manifest::validate_references(&m, repo_root) {
+    let ref_ok = match manifest::validate_references(m, repo_root) {
         Ok(()) => true,
         Err(e) => {
             writeln!(
