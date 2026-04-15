@@ -68,6 +68,7 @@ pub fn run(
         let local_bytes: Option<Vec<u8>> = std::fs::read(&local_path).ok();
 
         let result = match rule.strategy {
+            Strategy::Ignore => continue,
             Strategy::Delete => strategy::delete::apply(local_bytes.is_some()),
             Strategy::Replace | Strategy::CreateOnly => {
                 let source = rule.source.as_deref().unwrap_or(&rule.path);
