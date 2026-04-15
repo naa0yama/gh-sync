@@ -410,6 +410,12 @@ pub enum Strategy {
     Delete,
     /// Apply a unified diff patch on top of the upstream file.
     Patch,
+    /// Exclude this path from sync entirely.
+    ///
+    /// Used in a local overlay manifest to cancel an upstream rule for the
+    /// same `path`. The file is never downloaded, patched, deleted, or
+    /// checked for drift.
+    Ignore,
 }
 
 impl std::fmt::Display for Strategy {
@@ -419,6 +425,7 @@ impl std::fmt::Display for Strategy {
             Self::CreateOnly => "create_only",
             Self::Delete => "delete",
             Self::Patch => "patch",
+            Self::Ignore => "ignore",
         })
     }
 }
@@ -463,6 +470,7 @@ impl Manifest {
 ///
 /// # Errors
 /// Returns [`SyncError::Validation`] if one or more constraints are violated.
+#[allow(clippy::too_many_lines)]
 pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
     let mut errors: Vec<ValidationError> = Vec::new();
 
@@ -550,6 +558,22 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
                         i,
                         "patch",
                         "field not allowed for strategy 'create_only'",
+                    ));
+                }
+            }
+            Strategy::Ignore => {
+                if rule.source.is_some() {
+                    errors.push(ValidationError::rule(
+                        i,
+                        "source",
+                        "field not allowed for strategy 'ignore'",
+                    ));
+                }
+                if rule.patch.is_some() {
+                    errors.push(ValidationError::rule(
+                        i,
+                        "patch",
+                        "field not allowed for strategy 'ignore'",
                     ));
                 }
             }
@@ -1034,6 +1058,8 @@ files:
   - path: other.toml
     strategy: patch
     patch: custom/other.toml.patch
+  - path: optional.txt
+    strategy: ignore
 ",
         );
     }
@@ -1374,6 +1400,63 @@ spec:
         - 'songmu/tagpr@*'
 ",
         );
+    }
+
+    // --- Strategy::Ignore ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn test_schema_ignore_is_valid() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: ignore
+",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn test_schema_ignore_with_source() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: ignore
+    source: bar.txt
+",
+            "source",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn test_schema_ignore_with_patch() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: ignore
+    patch: foo.patch
+",
+            "patch",
+        );
+    }
+
+    #[test]
+    fn test_strategy_display() {
+        assert_eq!(Strategy::Replace.to_string(), "replace");
+        assert_eq!(Strategy::CreateOnly.to_string(), "create_only");
+        assert_eq!(Strategy::Delete.to_string(), "delete");
+        assert_eq!(Strategy::Patch.to_string(), "patch");
+        assert_eq!(Strategy::Ignore.to_string(), "ignore");
     }
 
     #[cfg_attr(miri, ignore = "tempfile I/O not supported under Miri")]
