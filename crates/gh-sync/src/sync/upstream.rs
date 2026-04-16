@@ -53,6 +53,27 @@ impl UpstreamFetcher for GhFetcher {
     // NOTEST(io): thin wrapper around the `gh` CLI binary — exercised via
     // integration tests only; unit tests use MockFetcher instead.
     #[cfg_attr(coverage_nightly, coverage(off))]
+    fn resolve_tag_sha(&self, repo: &str, tag: &str) -> anyhow::Result<String> {
+        use anyhow::Context as _;
+
+        let url = format!("repos/{repo}/commits/{tag}");
+        let output = std::process::Command::new("gh")
+            .args(["api", &url, "--jq", ".sha"])
+            .output()
+            .context("failed to spawn `gh`")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("`gh api` failed: {stderr}");
+        }
+
+        let sha = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        Ok(sha)
+    }
+
+    // NOTEST(io): thin wrapper around the `gh` CLI binary — exercised via
+    // integration tests only; unit tests use MockFetcher instead.
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn list_all_files(&self, repo: &str, ref_: &str) -> anyhow::Result<Vec<TreeEntry>> {
         use anyhow::Context as _;
 
