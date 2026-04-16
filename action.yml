@@ -27,7 +27,7 @@ inputs:
   token:
     description: >
       GitHub token for gh release download and for the gh CLI inside gh-sync.
-      Pass ${{ secrets.GITHUB_TOKEN }} or a PAT with repo read scope.
+      Pass secrets.GITHUB_TOKEN or a PAT with repo read scope.
     required: true
 
 runs:
