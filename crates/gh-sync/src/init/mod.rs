@@ -483,6 +483,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "libyml (C FFI) triggers UB under Miri")]
     fn read_upstream_manifest_returns_none_for_invalid_yaml() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("bad.yaml");
@@ -491,6 +492,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "libyml (C FFI) triggers UB under Miri")]
     fn read_upstream_manifest_parses_valid_config() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yaml");
