@@ -589,6 +589,45 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
         validate_action_patterns(patterns, &mut errors);
     }
 
+    // spec.merge_strategy: at least one merge method must be enabled
+    if let Some(spec) = &manifest.spec
+        && let Some(ms) = &spec.merge_strategy
+        && ms.allow_merge_commit == Some(false)
+        && ms.allow_squash_merge == Some(false)
+        && ms.allow_rebase_merge == Some(false)
+    {
+        errors.push(ValidationError::top_level(
+            "spec.merge_strategy",
+            "at least one merge method must be enabled (allow_merge_commit, allow_squash_merge, or allow_rebase_merge)",
+        ));
+    }
+
+    if let Some(spec) = &manifest.spec
+        && let Some(actions) = &spec.actions
+        && let Some(value) = &actions.allowed_actions
+        && !matches!(value.as_str(), "all" | "local_only" | "selected")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.actions.allowed_actions",
+            format!("must be one of 'all', 'local_only', 'selected'; got '{value}'"),
+        ));
+    }
+
+    // spec.actions.selected_actions: required when allowed_actions is "selected"
+    if let Some(spec) = &manifest.spec
+        && let Some(actions) = &spec.actions
+        && actions.allowed_actions.as_deref() == Some("selected")
+        && (actions.selected_actions.is_none()
+            || actions.selected_actions.as_ref().is_some_and(|sa| {
+                sa.github_owned_allowed.is_none() && sa.patterns_allowed.is_none()
+            }))
+    {
+        errors.push(ValidationError::top_level(
+            "spec.actions.selected_actions",
+            "required when allowed_actions is 'selected': set github_owned_allowed or patterns_allowed",
+        ));
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -1457,6 +1496,121 @@ files:
         assert_eq!(Strategy::Delete.to_string(), "delete");
         assert_eq!(Strategy::Patch.to_string(), "patch");
         assert_eq!(Strategy::Ignore.to_string(), "ignore");
+    }
+
+    // --- validate_schema: merge_strategy all-disabled guard ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_strategy_all_disabled_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    allow_merge_commit: false
+    allow_squash_merge: false
+    allow_rebase_merge: false
+",
+            "spec.merge_strategy",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_strategy_one_enabled_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    allow_merge_commit: false
+    allow_squash_merge: false
+    allow_rebase_merge: true
+",
+        );
+    }
+
+    // --- validate_schema: allowed_actions ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_actions_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    allowed_actions: bad_value
+",
+            "spec.actions.allowed_actions",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_actions_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    allowed_actions: all
+",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_actions_selected_without_patterns_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    allowed_actions: selected
+",
+            "spec.actions.selected_actions",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_actions_selected_with_patterns_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    allowed_actions: selected
+    selected_actions:
+      github_owned_allowed: true
+",
+        );
     }
 
     #[cfg_attr(miri, ignore = "tempfile I/O not supported under Miri")]
