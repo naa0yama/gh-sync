@@ -1,10 +1,14 @@
 # Changelog
 
 ## [v0.2.0](https://github.com/naa0yama/gh-sync/compare/v0.1.5...v0.2.0) - 2026-04-16
+
 ### Documentation 🗒️
+
 - remove: remove gh-infra tooling, drop bundled gh-sync config, and bump deps by @naa0yama in https://github.com/naa0yama/gh-sync/pull/19
 - fix: prevent GitHub API 422 for merge-method and allowed_actions constraints by @naa0yama in https://github.com/naa0yama/gh-sync/pull/21
+
 ### Development Environment 🔧
+
 - Update taiki-e/install-action action to v2.75.2 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/22
 
 ## [v0.1.5](https://github.com/naa0yama/gh-sync/compare/v0.1.4...v0.1.5) - 2026-04-16
