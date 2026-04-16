@@ -224,6 +224,7 @@ spec:
         - "k1low/gh-setup@*"
         - "k1low/octocov-action@*"
         - "mozilla-actions/sccache-action@*"
+        - "naa0yama/gh-sync@*"
         - "songmu/tagpr@*"
         - "swatinem/rust-cache@*"
         - "taiki-e/install-action@*"
