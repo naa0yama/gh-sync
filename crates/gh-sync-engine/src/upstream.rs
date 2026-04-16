@@ -260,4 +260,40 @@ mod tests {
         let result = fetcher.list_all_files("owner/repo", "main").unwrap();
         assert!(result.is_empty());
     }
+
+    #[test]
+    fn mock_fetcher_with_sha_returns_specified_sha() {
+        // Arrange
+        let fetcher = MockFetcher::with_sha("test-abc123def456abc123def456abc123def4");
+
+        // Act
+        let sha = fetcher.resolve_tag_sha("owner/repo", "v1.2.3").unwrap();
+
+        // Assert
+        assert_eq!(sha, "test-abc123def456abc123def456abc123def4");
+    }
+
+    #[test]
+    fn mock_fetcher_with_sha_ignores_repo_and_tag_args() {
+        // resolve_tag_sha returns the configured SHA regardless of args.
+        let fetcher = MockFetcher::with_sha("fixed-sha-value");
+
+        let sha1 = fetcher.resolve_tag_sha("any/repo", "v0.1.0").unwrap();
+        let sha2 = fetcher.resolve_tag_sha("other/repo", "v9.9.9").unwrap();
+
+        assert_eq!(sha1, sha2, "SHA must be the same for any input");
+        assert_eq!(sha1, "fixed-sha-value");
+    }
+
+    #[test]
+    fn mock_fetcher_default_sha_is_forty_zeros() {
+        // All constructors except with_sha use a zero SHA as default.
+        let fetcher = MockFetcher::content(b"data".to_vec());
+        let sha = fetcher.resolve_tag_sha("owner/repo", "v1.0.0").unwrap();
+        assert_eq!(sha.len(), 40, "SHA must be 40 characters");
+        assert!(
+            sha.chars().all(|c| c == '0'),
+            "default SHA must be all zeros"
+        );
+    }
 }

@@ -106,6 +106,17 @@ fn test_cli_version_short_flag() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
+fn test_cli_pr_help() {
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["pr", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("title"))
+        .stdout(predicate::str::contains("branch"));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
 fn test_cli_validate_and_ci_check_conflict() {
     // --validate and --ci-check are mutually exclusive (sync file only)
     let mut cmd = cargo_bin_cmd!("gh-sync");

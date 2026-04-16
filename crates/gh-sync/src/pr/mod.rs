@@ -129,8 +129,8 @@ fn changed_files(runner: &dyn GhRunner) -> anyhow::Result<Vec<(String, bool)>> {
         .context("failed to run gh --version (sanity check)")?;
     drop(out); // just checking gh is available
 
-    // Use git directly since GhRunner wraps `gh`, not `git`.
-    // We accept that git is available in the same environment.
+    // NOTEST(external-cmd): spawns `git` directly — pure parsing logic is
+    // covered by `parse_porcelain_output` unit tests.
     let output = std::process::Command::new("git")
         .args(["status", "--porcelain"])
         .output()
@@ -142,6 +142,15 @@ fn changed_files(runner: &dyn GhRunner) -> anyhow::Result<Vec<(String, bool)>> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_porcelain_output(&stdout))
+}
+
+/// Parse `git status --porcelain` (v1) output into `(path, deleted)` pairs.
+///
+/// Each line is `XY path` where `XY` is a two-character status code.
+/// Rename lines use the form `XY old -> new`; the new (right-hand) path is
+/// returned.  Lines shorter than 4 characters are silently skipped.
+fn parse_porcelain_output(stdout: &str) -> Vec<(String, bool)> {
     let mut files = Vec::new();
     for line in stdout.lines() {
         if line.len() < 4 {
@@ -158,13 +167,27 @@ fn changed_files(runner: &dyn GhRunner) -> anyhow::Result<Vec<(String, bool)>> {
         let deleted = xy.trim() == "D" || xy.starts_with('D') || xy.ends_with('D');
         files.push((path, deleted));
     }
-    Ok(files)
+    files
 }
 
 /// Return the repository name in `owner/repo` format.
 fn repo_name(runner: &dyn GhRunner) -> anyhow::Result<String> {
-    // Prefer GITHUB_REPOSITORY env var (available in GitHub Actions).
-    if let Ok(v) = std::env::var("GITHUB_REPOSITORY")
+    // NOTEST(env): reads GITHUB_REPOSITORY from process environment —
+    // covered by repo_name_inner unit tests via explicit injection.
+    repo_name_inner(runner, std::env::var("GITHUB_REPOSITORY").ok())
+}
+
+/// Testable inner implementation of [`repo_name`].
+///
+/// When `env_repo` contains a non-empty value it is returned immediately
+/// (matching GitHub Actions' `GITHUB_REPOSITORY`).  Otherwise the `gh` CLI
+/// is called to determine the name.
+///
+/// # Errors
+///
+/// Returns an error when `env_repo` is absent and the `gh` CLI call fails.
+fn repo_name_inner(runner: &dyn GhRunner, env_repo: Option<String>) -> anyhow::Result<String> {
+    if let Some(v) = env_repo
         && !v.is_empty()
     {
         return Ok(v);
@@ -458,7 +481,11 @@ mod tests {
 
     use super::*;
 
-    // Minimal mock runner: maps (args[0], args[1]) to canned GhOutput.
+    // ---------------------------------------------------------------------------
+    // Test helpers
+    // ---------------------------------------------------------------------------
+
+    /// Minimal mock runner that returns pre-canned responses in call order.
     struct MockRunner {
         responses: Vec<(Vec<String>, GhOutput)>,
         call_index: std::sync::Mutex<usize>,
@@ -508,18 +535,134 @@ mod tests {
         }
     }
 
+    /// Runner that always returns `Err` from `run()` (simulates spawn failure).
+    struct FailRunner;
+
+    impl GhRunner for FailRunner {
+        fn run(&self, _args: &[&str], _stdin: Option<&[u8]>) -> anyhow::Result<GhOutput> {
+            Err(anyhow::anyhow!("spawn failed"))
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // parse_porcelain_output
+    // ---------------------------------------------------------------------------
+
     #[test]
-    fn run_exits_early_when_no_changes() {
-        // When git status --porcelain returns nothing, run() should succeed
-        // without calling gh at all. We simulate by passing a runner that would
-        // fail on any call — but since git is used directly, we just need to
-        // ensure the early-exit path is tested via unit logic.
-        // This test verifies changed_files() returns empty for a clean tree by
-        // testing the helper directly with a fake environment if possible.
-        // Full coverage of the early-exit is provided by integration tests.
-        // Just verify require_success works.
+    fn parse_porcelain_empty_returns_empty() {
+        assert!(parse_porcelain_output("").is_empty());
+    }
+
+    #[test]
+    fn parse_porcelain_modified_unstaged() {
+        // " M path" — Y=M means working-tree change, not deleted
+        let result = parse_porcelain_output(" M src/lib.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "src/lib.rs");
+        assert!(!result[0].1, "should not be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_modified_staged() {
+        // "M  path" — X=M staged change, not deleted
+        let result = parse_porcelain_output("M  src/lib.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "src/lib.rs");
+        assert!(!result[0].1, "should not be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_added_staged() {
+        // "A  path" — X=A new file staged, not deleted
+        let result = parse_porcelain_output("A  new_file.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "new_file.rs");
+        assert!(!result[0].1, "added file should not be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_untracked_file() {
+        // "?? path" — untracked file, not deleted
+        let result = parse_porcelain_output("?? untracked.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "untracked.rs");
+        assert!(!result[0].1, "untracked file should not be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_deleted_unstaged() {
+        // " D path" — Y=D working-tree deletion
+        let result = parse_porcelain_output(" D path/to/file.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "path/to/file.rs");
+        assert!(result[0].1, "should be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_deleted_staged() {
+        // "D  path" — X=D staged deletion
+        let result = parse_porcelain_output("D  path/to/file.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "path/to/file.rs");
+        assert!(result[0].1, "staged delete should be marked deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_staged_modified_unstaged_deleted() {
+        // "MD path" — X=M staged modification, Y=D working-tree deletion
+        let result = parse_porcelain_output("MD path/to/file.rs\n");
+        assert_eq!(result.len(), 1);
+        assert!(result[0].1, "ends-with-D should be treated as deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_renamed_takes_new_path() {
+        // "R  old.rs -> new.rs" — right-hand side is the current path
+        let result = parse_porcelain_output("R  old/name.rs -> new/name.rs\n");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "new/name.rs");
+        assert!(!result[0].1, "renamed file should not be deleted");
+    }
+
+    #[test]
+    fn parse_porcelain_skips_short_lines() {
+        // Lines shorter than 4 characters must be silently ignored.
+        let result = parse_porcelain_output("M \n");
+        assert!(result.is_empty(), "short line should be skipped");
+    }
+
+    #[test]
+    fn parse_porcelain_multiple_files() {
+        let out = " M src/lib.rs\n D deleted.txt\nA  added.rs\n";
+        let result = parse_porcelain_output(out);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].0, "src/lib.rs");
+        assert!(!result[0].1);
+        assert_eq!(result[1].0, "deleted.txt");
+        assert!(result[1].1);
+        assert_eq!(result[2].0, "added.rs");
+        assert!(!result[2].1);
+    }
+
+    #[test]
+    fn parse_porcelain_whitespace_trimmed_from_path() {
+        // Extra leading/trailing whitespace in the path segment is stripped.
+        let result = parse_porcelain_output(" M  path/with spaces.txt \n");
+        assert_eq!(result[0].0, "path/with spaces.txt");
+    }
+
+    // ---------------------------------------------------------------------------
+    // require_success
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn require_success_ok_on_zero_exit() {
         let ok = MockRunner::ok("some-sha\n");
         assert!(require_success(&ok, "test").is_ok());
+    }
+
+    #[test]
+    fn require_success_err_on_nonzero_exit() {
         let err = MockRunner::err("bad");
         assert!(require_success(&err, "test").is_err());
     }
@@ -542,12 +685,167 @@ mod tests {
         );
     }
 
+    // ---------------------------------------------------------------------------
+    // chrono_timestamp
+    // ---------------------------------------------------------------------------
+
     #[test]
-    fn chrono_timestamp_is_nonempty() {
+    fn chrono_timestamp_is_nonempty_digits() {
         let ts = chrono_timestamp();
         assert!(!ts.is_empty());
         assert!(ts.chars().all(|c| c.is_ascii_digit()));
     }
+
+    #[test]
+    fn chrono_timestamp_is_monotonically_nondecreasing() {
+        let t1 = chrono_timestamp()
+            .parse::<u64>()
+            .expect("timestamp must be a number");
+        let t2 = chrono_timestamp()
+            .parse::<u64>()
+            .expect("timestamp must be a number");
+        assert!(t2 >= t1, "timestamps must not decrease");
+    }
+
+    // ---------------------------------------------------------------------------
+    // repo_name_inner
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn repo_name_inner_returns_env_when_set() {
+        // When env_repo is present and non-empty, the runner is never called.
+        let runner = FailRunner; // would fail if called
+        let result = repo_name_inner(&runner, Some(String::from("owner/repo"))).unwrap();
+        assert_eq!(result, "owner/repo");
+    }
+
+    #[test]
+    fn repo_name_inner_ignores_empty_env_and_calls_runner() {
+        // Empty string must fall through to the gh CLI path.
+        let runner = MockRunner::new(vec![(
+            vec!["repo", "view"],
+            MockRunner::ok("cli-owner/cli-repo\n"),
+        )]);
+        let result = repo_name_inner(&runner, Some(String::new())).unwrap();
+        assert_eq!(result, "cli-owner/cli-repo");
+    }
+
+    #[test]
+    fn repo_name_inner_calls_runner_when_env_none() {
+        let runner = MockRunner::new(vec![(
+            vec!["repo", "view"],
+            MockRunner::ok("runner-owner/runner-repo\n"),
+        )]);
+        let result = repo_name_inner(&runner, None).unwrap();
+        assert_eq!(result, "runner-owner/runner-repo");
+    }
+
+    #[test]
+    fn repo_name_inner_propagates_runner_gh_error() {
+        let runner = MockRunner::new(vec![(
+            vec!["repo", "view"],
+            MockRunner::err("authentication required"),
+        )]);
+        let err = repo_name_inner(&runner, None).unwrap_err();
+        assert!(
+            err.to_string().contains("authentication required")
+                || err.to_string().contains("gh repo view"),
+            "expected error detail: {err}"
+        );
+    }
+
+    #[test]
+    fn repo_name_inner_propagates_spawn_failure() {
+        let err = repo_name_inner(&FailRunner, None).unwrap_err();
+        assert!(
+            err.to_string().contains("spawn failed") || err.to_string().contains("failed"),
+            "expected spawn error: {err}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // default_branch
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn default_branch_returns_branch_name() {
+        let runner = MockRunner::new(vec![(vec!["repo", "view"], MockRunner::ok("main\n"))]);
+        let branch = default_branch(&runner, "owner/repo").unwrap();
+        assert_eq!(branch, "main");
+    }
+
+    #[test]
+    fn default_branch_trims_whitespace() {
+        let runner = MockRunner::new(vec![(
+            vec!["repo", "view"],
+            MockRunner::ok("  develop  \n"),
+        )]);
+        let branch = default_branch(&runner, "owner/repo").unwrap();
+        assert_eq!(branch, "develop");
+    }
+
+    #[test]
+    fn default_branch_propagates_gh_error() {
+        let runner = MockRunner::new(vec![(vec!["repo", "view"], MockRunner::err("not found"))]);
+        let err = default_branch(&runner, "owner/repo").unwrap_err();
+        assert!(
+            err.to_string().contains("not found") || err.to_string().contains("defaultBranchRef"),
+            "expected error: {err}"
+        );
+    }
+
+    #[test]
+    fn default_branch_propagates_spawn_failure() {
+        let err = default_branch(&FailRunner, "owner/repo").unwrap_err();
+        assert!(
+            err.to_string().contains("spawn failed") || err.to_string().contains("failed"),
+            "expected spawn error: {err}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // head_sha
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn head_sha_returns_commit_sha() {
+        let runner = MockRunner::new(vec![(
+            vec!["api", "repos/owner/repo/git/ref/heads/main"],
+            MockRunner::ok("aabbccdd\n"),
+        )]);
+        let sha = head_sha(&runner, "owner/repo", "main").unwrap();
+        assert_eq!(sha, "aabbccdd");
+    }
+
+    #[test]
+    fn head_sha_trims_whitespace() {
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::ok("  deadbeef  \n"))]);
+        let sha = head_sha(&runner, "owner/repo", "main").unwrap();
+        assert_eq!(sha, "deadbeef");
+    }
+
+    #[test]
+    fn head_sha_propagates_gh_error() {
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::err("branch not found"))]);
+        let err = head_sha(&runner, "owner/repo", "nonexistent").unwrap_err();
+        assert!(
+            err.to_string().contains("branch not found") || err.to_string().contains("git/ref"),
+            "expected error: {err}"
+        );
+    }
+
+    #[test]
+    fn head_sha_propagates_spawn_failure() {
+        let err = head_sha(&FailRunner, "owner/repo", "main").unwrap_err();
+        assert!(
+            err.to_string().contains("spawn failed") || err.to_string().contains("failed"),
+            "expected spawn error: {err}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // create_blob
+    // ---------------------------------------------------------------------------
 
     #[test]
     fn create_blob_calls_correct_endpoint() {
@@ -567,6 +865,16 @@ mod tests {
     }
 
     #[test]
+    fn create_blob_propagates_spawn_failure() {
+        let err = create_blob(&FailRunner, "owner/repo", "content").unwrap_err();
+        assert!(err.to_string().contains("spawn failed") || err.to_string().contains("failed"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // create_tree
+    // ---------------------------------------------------------------------------
+
+    #[test]
     fn create_tree_calls_correct_endpoint() {
         let runner = MockRunner::new(vec![(
             vec!["api", "repos/owner/repo/git/trees"],
@@ -583,6 +891,32 @@ mod tests {
     }
 
     #[test]
+    fn create_tree_with_deleted_entry() {
+        // A deleted entry has sha=None; serialisation must not panic.
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::ok("tree-sha2\n"))]);
+        let entries = vec![TreeEntry {
+            path: String::from("removed.txt"),
+            mode: String::from("100644"),
+            type_: String::from("blob"),
+            sha: None,
+        }];
+        let sha = create_tree(&runner, "owner/repo", "base-sha", &entries).unwrap();
+        assert_eq!(sha, "tree-sha2");
+    }
+
+    #[test]
+    fn create_tree_propagates_error() {
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::err("server error"))]);
+        let entries: Vec<TreeEntry> = vec![];
+        let err = create_tree(&runner, "owner/repo", "base-sha", &entries).unwrap_err();
+        assert!(err.to_string().contains("server error") || err.to_string().contains("failed"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // create_commit
+    // ---------------------------------------------------------------------------
+
+    #[test]
     fn create_commit_calls_correct_endpoint() {
         let runner = MockRunner::new(vec![(
             vec!["api", "repos/owner/repo/git/commits"],
@@ -597,6 +931,27 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sha, "commit-sha");
+    }
+
+    #[test]
+    fn create_commit_propagates_error() {
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::err("commit failed"))]);
+        let err = create_commit(&runner, "owner/repo", "msg", "tree", "parent").unwrap_err();
+        assert!(err.to_string().contains("commit failed") || err.to_string().contains("failed"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // create_branch_ref / force_update_ref
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn create_branch_ref_succeeds_on_first_call() {
+        // Normal path: POST succeeds.
+        let runner = MockRunner::new(vec![(
+            vec!["api", "repos/owner/repo/git/refs"],
+            MockRunner::ok(""),
+        )]);
+        assert!(create_branch_ref(&runner, "owner/repo", "my-branch", "commit-sha").is_ok());
     }
 
     #[test]
@@ -620,6 +975,21 @@ mod tests {
     }
 
     #[test]
+    fn create_branch_ref_fails_on_generic_error() {
+        // Non-"already exists" failure must propagate as error.
+        let runner = MockRunner::new(vec![(vec!["api"], MockRunner::err("permission denied"))]);
+        let err = create_branch_ref(&runner, "owner/repo", "my-branch", "sha").unwrap_err();
+        assert!(
+            err.to_string().contains("permission denied") || err.to_string().contains("git/refs"),
+            "expected error: {err}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // create_pr
+    // ---------------------------------------------------------------------------
+
+    #[test]
     fn create_pr_returns_url_on_success() {
         let runner = MockRunner::new(vec![(
             vec!["pr", "create"],
@@ -640,5 +1010,32 @@ mod tests {
         ]);
         let url = create_pr(&runner, "owner/repo", "main", "my-branch", "title", "body").unwrap();
         assert_eq!(url, "https://github.com/owner/repo/pull/42");
+    }
+
+    #[test]
+    fn create_pr_fails_on_generic_error() {
+        // Error message without "already exists" must propagate.
+        let runner = MockRunner::new(vec![(
+            vec!["pr", "create"],
+            MockRunner::err("base branch not found"),
+        )]);
+        let err =
+            create_pr(&runner, "owner/repo", "main", "my-branch", "title", "body").unwrap_err();
+        assert!(
+            err.to_string().contains("base branch not found")
+                || err.to_string().contains("gh pr create"),
+            "expected error: {err}"
+        );
+    }
+
+    #[test]
+    fn create_pr_url_is_trimmed() {
+        // Trailing newlines in gh output must be stripped.
+        let runner = MockRunner::new(vec![(
+            vec!["pr", "create"],
+            MockRunner::ok("https://github.com/owner/repo/pull/99\n\n"),
+        )]);
+        let url = create_pr(&runner, "owner/repo", "main", "my-branch", "title", "body").unwrap();
+        assert_eq!(url, "https://github.com/owner/repo/pull/99");
     }
 }
