@@ -600,14 +600,6 @@ fn execute_inner(
     client: &dyn GhRepoClient,
     w: &mut dyn Write,
 ) -> ExitCode {
-    // Resolve the directory containing the manifest as the repo root.
-    let repo_root = args
-        .manifest
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .unwrap_or_else(|| std::path::Path::new("."));
-
     // Resolve the effective manifest (upstream fetch + optional local overlay,
     // or just local file when --upstream-manifest is not given).
     let fetcher = GhFetcher;
@@ -623,13 +615,11 @@ fn execute_inner(
         }
     };
 
-    // Validate schema and local references before making any API calls.
+    // Validate schema before making any API calls.
     // A misconfigured manifest must be caught early to prevent partial apply.
+    // validate_references() (patch file existence) is intentionally skipped:
+    // sync repo only uses spec: settings and never reads patch files.
     if let Err(e) = manifest::validate_schema(&manifest) {
-        tracing::error!("manifest validation failed: {e}");
-        return ExitCode::FAILURE;
-    }
-    if let Err(e) = manifest::validate_references(&manifest, repo_root) {
         tracing::error!("manifest validation failed: {e}");
         return ExitCode::FAILURE;
     }
