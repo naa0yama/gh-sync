@@ -256,7 +256,7 @@ pub fn run(
         ];
         let idx = dialoguer::Select::new()
             .with_prompt("How would you like to create the config?")
-            .items(&choices)
+            .items(choices)
             .default(0)
             .interact()
             .context("mode selection cancelled")?;

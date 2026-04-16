@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: naa0yama/gh-sync@a45d6e5212ad1a8cff3d39aa8cce51c7d80b75b7 # v0.1.4
+      - uses: naa0yama/gh-sync@d3d9e4fd82e840e0bbc2e58b5bad6ebddae1c9eb # v0.1.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml

@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@<sha> # vX.Y.Z
         with:
           persist-credentials: false
-      - uses: naa0yama/gh-sync@v0.1.3
+      - uses: naa0yama/gh-sync@v0.1.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -77,7 +77,7 @@ jobs:
 ローカルの `manifest` ファイルが存在すれば、同じ `path` のルールで local が上書き (local overlay) されます。
 
 ```yaml
-- uses: naa0yama/gh-sync@v0.1.3
+- uses: naa0yama/gh-sync@v0.1.5
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
@@ -139,7 +139,6 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │   └── pre-push                # プッシュ前チェック
 ├── .github/                    # GitHub Actions & 設定
 │   ├── actions/                # カスタムアクション
-│   ├── infra/                  # gh-infra マニフェスト (リポジトリ設定の宣言的管理)
 │   ├── gh-sync/                # テンプレート同期設定
 │   │   └── config.yaml         # 同期マニフェスト
 │   ├── workflows/              # CI/CD ワークフロー
