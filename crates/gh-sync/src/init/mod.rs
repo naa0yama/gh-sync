@@ -15,6 +15,7 @@ use std::io::{self, IsTerminal as _, Write as _};
 use std::path::Path;
 use std::process::ExitCode;
 
+use anyhow::Context as _;
 use cli::InitArgs;
 
 use crate::sync::upstream::GhFetcher;
@@ -65,6 +66,85 @@ fn validate_repo_format(repo: &str) -> anyhow::Result<()> {
     }
 }
 
+/// Check whether `path` needs to be (over)written with `new_content`.
+///
+/// - If the file does not exist, returns `Ok(true)` (safe to write).
+/// - If `force` is set, returns `Ok(true)` (skip all checks).
+/// - If the file exists and its content equals `new_content`, prints an
+///   "already up to date" message and returns `Ok(false)`.
+/// - If not a TTY, returns an error suggesting `--force`.
+/// - Otherwise, shows a unified diff and prompts the user interactively.
+///
+/// # Errors
+///
+/// Returns an error when reading the existing file fails, the prompt is
+/// cancelled, or the terminal is non-interactive without `--force`.
+fn confirm_overwrite_with_diff(
+    path: &Path,
+    new_content: &str,
+    force: bool,
+) -> anyhow::Result<bool> {
+    if !path.exists() {
+        return Ok(true);
+    }
+    if force {
+        return Ok(true);
+    }
+
+    let existing = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read '{}'", path.display()))?;
+
+    if existing == new_content {
+        let mut stdout = io::stdout();
+        writeln!(stdout, "'{}' is already up to date.", path.display())
+            .context("failed to write to stdout")?;
+        return Ok(false);
+    }
+
+    if !io::stdin().is_terminal() {
+        anyhow::bail!(
+            "'{}' already exists; use --force to overwrite",
+            path.display()
+        );
+    }
+
+    // Display a unified diff between the existing and new content.
+    let diff = similar::TextDiff::from_lines(existing.as_str(), new_content);
+    let mut stdout = io::stdout();
+    writeln!(
+        stdout,
+        "--- {} (existing)\n+++ {} (new)",
+        path.display(),
+        path.display()
+    )
+    .context("failed to write to stdout")?;
+    for group in diff.grouped_ops(3) {
+        for op in &group {
+            for change in diff.iter_changes(op) {
+                let line = change.value().trim_end_matches('\n');
+                let styled = match change.tag() {
+                    similar::ChangeTag::Delete => {
+                        console::style(format!("-{line}")).red().to_string()
+                    }
+                    similar::ChangeTag::Insert => {
+                        console::style(format!("+{line}")).green().to_string()
+                    }
+                    similar::ChangeTag::Equal => format!(" {line}"),
+                };
+                writeln!(stdout, "{styled}").context("failed to write to stdout")?;
+            }
+        }
+    }
+
+    let confirmed = dialoguer::Confirm::new()
+        .with_prompt(format!("Overwrite '{}'?", path.display()))
+        .default(false)
+        .interact()
+        .context("confirmation prompt cancelled")?;
+
+    Ok(confirmed)
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -101,7 +181,10 @@ pub fn run(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
 ) -> anyhow::Result<()> {
-    use anyhow::Context as _;
+    // Dispatch to workflow-only mode when --with-workflow is set.
+    if args.with_workflow {
+        return run_workflow_only(args, fetcher);
+    }
 
     // -----------------------------------------------------------------------
     // 1. Check for existing output file
@@ -221,53 +304,206 @@ pub fn run(
     .context("failed to write to stdout")?;
 
     // -----------------------------------------------------------------------
-    // 6. Optionally generate the GitHub Actions workflow file
+    // 6. Always generate the GitHub Actions workflow file
     // -----------------------------------------------------------------------
-    let emit_workflow = if args.with_workflow {
-        true
-    } else if io::stdin().is_terminal() {
-        dialoguer::Confirm::new()
-            .with_prompt("Generate a GitHub Actions workflow (.github/workflows/gh-sync.yaml)?")
-            .default(true)
-            .interact()
-            .context("workflow prompt cancelled")?
-    } else {
-        false
-    };
+    let workflow_path = Path::new(workflow::WORKFLOW_PATH);
+    let version = concat!("v", env!("CARGO_PKG_VERSION"));
 
-    if emit_workflow {
-        let workflow_path = Path::new(workflow::WORKFLOW_PATH);
-        let version = concat!("v", env!("CARGO_PKG_VERSION"));
+    let sha = fetcher
+        .resolve_tag_sha("naa0yama/gh-sync", version)
+        .with_context(|| format!("failed to resolve SHA for naa0yama/gh-sync@{version}"))?;
 
-        if workflow_path.exists() && !args.force {
-            if io::stdin().is_terminal() {
-                let confirmed = dialoguer::Confirm::new()
-                    .with_prompt(format!(
-                        "'{}' already exists. Overwrite?",
-                        workflow_path.display()
-                    ))
-                    .default(false)
-                    .interact()
-                    .context("confirmation prompt cancelled")?;
-                if !confirmed {
-                    writeln!(stdout, "Skipped '{}'.", workflow_path.display())
-                        .context("failed to write to stdout")?;
-                    return Ok(());
-                }
-            } else {
-                anyhow::bail!(
-                    "'{}' already exists; use --force to overwrite",
-                    workflow_path.display()
-                );
-            }
-        }
+    let upstream_manifest = format!("{repo}@main:.github/gh-sync/config.yaml");
+    let rendered = workflow::render(version, &sha, Some(&upstream_manifest));
 
-        // Always pin to `main` in the generated workflow; users can edit afterwards.
-        let upstream_manifest = format!("{repo}@main:.github/gh-sync/config.yaml");
-        workflow::write_workflow_file(workflow_path, version, Some(&upstream_manifest))?;
+    if confirm_overwrite_with_diff(workflow_path, &rendered, args.force)? {
+        workflow::write_workflow_from_content(workflow_path, &rendered)?;
         writeln!(stdout, "[OK] created '{}'", workflow_path.display())
             .context("failed to write to stdout")?;
     }
 
     Ok(())
+}
+
+/// Workflow-only mode: generate (or update) the GitHub Actions workflow file
+/// without touching config or schema.
+///
+/// The `upstream-manifest` input is populated from the existing config file
+/// when present; otherwise the workflow is rendered with a commented-out
+/// placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the SHA cannot be resolved, the workflow file cannot
+/// be written, or the user declines to overwrite an existing file.
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn run_workflow_only(
+    args: &InitArgs,
+    fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
+) -> anyhow::Result<()> {
+    let version = concat!("v", env!("CARGO_PKG_VERSION"));
+
+    // Resolve the release tag to a commit SHA.
+    let sha = fetcher
+        .resolve_tag_sha("naa0yama/gh-sync", version)
+        .with_context(|| format!("failed to resolve SHA for naa0yama/gh-sync@{version}"))?;
+
+    // Attempt to read upstream info from the existing config file.
+    let config_path = Path::new(".github/gh-sync/config.yaml");
+    let upstream_manifest = read_upstream_manifest(config_path);
+
+    let rendered = workflow::render(version, &sha, upstream_manifest.as_deref());
+
+    let workflow_path = Path::new(workflow::WORKFLOW_PATH);
+    if confirm_overwrite_with_diff(workflow_path, &rendered, args.force)? {
+        workflow::write_workflow_from_content(workflow_path, &rendered)?;
+        let mut stdout = io::stdout();
+        writeln!(stdout, "[OK] created '{}'", workflow_path.display())
+            .context("failed to write to stdout")?;
+    }
+
+    Ok(())
+}
+
+/// Try to read `upstream-manifest` from an existing config file.
+///
+/// Returns `Some("owner/repo@ref:.github/gh-sync/config.yaml")` when the
+/// config file exists and can be parsed; `None` otherwise.
+fn read_upstream_manifest(config_path: &Path) -> Option<String> {
+    let Ok(content) = std::fs::read_to_string(config_path) else {
+        return None;
+    };
+    let Ok(manifest) = serde_yml::from_str::<gh_sync_manifest::manifest::Manifest>(&content) else {
+        return None;
+    };
+    Some(format!(
+        "{}@{}:.github/gh-sync/config.yaml",
+        manifest.upstream.repo, manifest.upstream.ref_
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    // ---------------------------------------------------------------------------
+    // is_valid_repo
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn valid_repo_accepts_owner_slash_name() {
+        assert!(is_valid_repo("owner/repo"));
+        assert!(is_valid_repo("naa0yama/boilerplate-rust"));
+        assert!(is_valid_repo("my.org/my_repo-name"));
+    }
+
+    #[test]
+    fn valid_repo_rejects_missing_slash() {
+        assert!(!is_valid_repo("no-slash"));
+        assert!(!is_valid_repo(""));
+    }
+
+    #[test]
+    fn valid_repo_rejects_multiple_slashes() {
+        assert!(!is_valid_repo("owner/name/extra"));
+    }
+
+    #[test]
+    fn valid_repo_rejects_empty_segments() {
+        assert!(!is_valid_repo("/name"));
+        assert!(!is_valid_repo("owner/"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // confirm_overwrite_with_diff
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn confirm_overwrite_returns_true_when_file_absent() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nonexistent.yaml");
+        let result = confirm_overwrite_with_diff(&path, "new content", false).unwrap();
+        assert!(result, "should return true when file does not exist");
+    }
+
+    #[test]
+    fn confirm_overwrite_returns_true_with_force() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("existing.yaml");
+        std::fs::write(&path, b"old content").unwrap();
+        let result = confirm_overwrite_with_diff(&path, "new content", true).unwrap();
+        assert!(result, "should return true when force=true");
+    }
+
+    #[test]
+    fn confirm_overwrite_returns_false_when_identical() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("same.yaml");
+        std::fs::write(&path, b"same content").unwrap();
+        // Non-TTY is fine here because identical content exits early.
+        let result = confirm_overwrite_with_diff(&path, "same content", false).unwrap();
+        assert!(!result, "should return false when content is identical");
+    }
+
+    #[test]
+    fn confirm_overwrite_errors_on_non_tty_with_diff() {
+        // In test environment stdin is not a TTY, so differing content should error.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("changed.yaml");
+        std::fs::write(&path, b"old content").unwrap();
+        let result = confirm_overwrite_with_diff(&path, "new content", false);
+        assert!(
+            result.is_err(),
+            "should error in non-TTY with differing content"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("--force"),
+            "error should mention --force, got: {msg}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // read_upstream_manifest
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn read_upstream_manifest_returns_none_for_missing_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nonexistent.yaml");
+        assert!(read_upstream_manifest(&path).is_none());
+    }
+
+    #[test]
+    fn read_upstream_manifest_returns_none_for_invalid_yaml() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("bad.yaml");
+        std::fs::write(&path, b"not: valid: yaml: [").unwrap();
+        assert!(read_upstream_manifest(&path).is_none());
+    }
+
+    #[test]
+    fn read_upstream_manifest_parses_valid_config() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yaml");
+        let yaml = "\
+upstream:
+  repo: owner/upstream
+  ref: main
+files:
+  - path: README.md
+    strategy: replace
+";
+        std::fs::write(&path, yaml).unwrap();
+        let result = read_upstream_manifest(&path).unwrap();
+        assert_eq!(result, "owner/upstream@main:.github/gh-sync/config.yaml");
+    }
 }

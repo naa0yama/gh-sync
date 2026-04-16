@@ -37,6 +37,7 @@ serde_yml = "0.0.12"
 # Interactive CLI prompts / ANSI terminal styling
 console = "0.15"
 dialoguer = "0.11"
+similar = "2"
 
 # Random
 rand = { version = "0.10", default-features = false, features = ["thread_rng"] }

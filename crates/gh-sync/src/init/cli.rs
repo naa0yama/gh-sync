@@ -35,7 +35,10 @@ pub struct InitArgs {
     #[arg(long = "force")]
     pub force: bool,
 
-    /// Also generate a GitHub Actions workflow that calls the gh-sync action
-    #[arg(long = "with-workflow")]
+    /// Generate only the GitHub Actions workflow file (skip config and schema)
+    #[arg(
+        long = "with-workflow",
+        conflicts_with_all = ["from_upstream", "select", "output"]
+    )]
     pub with_workflow: bool,
 }
