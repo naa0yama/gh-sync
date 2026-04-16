@@ -36,7 +36,7 @@ serde_yml = "0.0.12"
 
 # Interactive CLI prompts / ANSI terminal styling
 console = "0.15"
-dialoguer = "0.11"
+dialoguer = "0.12"
 similar = "2"
 
 # Random
