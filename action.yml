@@ -29,6 +29,13 @@ inputs:
       GitHub token for gh release download and for the gh CLI inside gh-sync.
       Pass secrets.GITHUB_TOKEN or a PAT with repo read scope.
     required: true
+  apply-files:
+    description: >
+      When true, run `sync file -y` to apply file changes instead of
+      drift-checking. Repo settings are not checked in this mode.
+      Combine with a `gh-sync pr` step to create a pull request automatically.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -113,6 +120,7 @@ runs:
         gh-sync sync file "${ARGS[@]}"
 
     - name: Drift check — repo settings
+      if: inputs.apply-files != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -127,6 +135,7 @@ runs:
         gh-sync sync repo "${ARGS[@]}"
 
     - name: Drift check — files
+      if: inputs.apply-files != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -135,6 +144,21 @@ runs:
       run: |
         set -euo pipefail
         ARGS=(--manifest "${MANIFEST}" --ci-check)
+        if [[ -n "${UPSTREAM_MANIFEST}" ]]; then
+          ARGS+=(--upstream-manifest "${UPSTREAM_MANIFEST}")
+        fi
+        gh-sync sync file "${ARGS[@]}"
+
+    - name: Apply file sync
+      if: inputs.apply-files == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        MANIFEST: ${{ inputs.manifest }}
+        UPSTREAM_MANIFEST: ${{ inputs.upstream-manifest }}
+      run: |
+        set -euo pipefail
+        ARGS=(--manifest "${MANIFEST}" -y)
         if [[ -n "${UPSTREAM_MANIFEST}" ]]; then
           ARGS+=(--upstream-manifest "${UPSTREAM_MANIFEST}")
         fi

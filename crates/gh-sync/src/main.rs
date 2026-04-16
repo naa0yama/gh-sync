@@ -3,6 +3,7 @@
 
 mod cli;
 mod init;
+mod pr;
 mod sync;
 
 use std::process::ExitCode;
@@ -26,5 +27,6 @@ fn main() -> ExitCode {
     match cli.command {
         Commands::Sync(args) => sync::execute(&args),
         Commands::Init(args) => init::execute(&args),
+        Commands::Pr(args) => pr::execute(&args),
     }
 }

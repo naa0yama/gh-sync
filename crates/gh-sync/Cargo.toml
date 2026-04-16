@@ -43,6 +43,7 @@ tempfile.workspace = true
 # Interactive CLI prompts / ANSI terminal styling
 console.workspace = true
 dialoguer.workspace = true
+similar.workspace = true
 
 # JSON / API response parsing
 serde_json.workspace = true

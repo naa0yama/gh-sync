@@ -1,10 +1,6 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: gh-sync check
+name: gh-sync
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
   schedule:
     - cron: "0 18 * * *" # daily at 03:00 JST
   workflow_dispatch:
@@ -12,21 +8,33 @@ on:
 permissions: {}
 
 concurrency:
-  group: gh-sync-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+  group: gh-sync
+  cancel-in-progress: true
 
 jobs:
-  gh-sync-check:
-    name: gh-sync-check
+  gh-sync:
+    name: file-sync
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write # Required to create branches and push commits
+      pull-requests: write # Required to create pull requests
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: naa0yama/gh-sync@93c2233ddf30c32021dd373d677d2575798f5eac # v0.1.3 # zizmor: ignore[unpinned-uses]
+
+      - uses: naa0yama/gh-sync@a45d6e5212ad1a8cff3d39aa8cce51c7d80b75b7 # v0.1.4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
+          apply-files: "true"
+
+      - name: Create PR if changed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh-sync pr \
+            --title "chore: sync files from upstream template" \
+            --body "Automated file sync by gh-sync scheduled workflow." \
+            --branch-prefix "gh-sync/file-sync"
