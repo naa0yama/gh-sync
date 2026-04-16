@@ -1,7 +1,9 @@
 # Changelog
 
 ## [v0.1.4](https://github.com/naa0yama/gh-sync/compare/v0.1.3...v0.1.4) - 2026-04-16
+
 ### Development Environment 🔧
+
 - Pin naa0yama/gh-sync action to 93c2233 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/12
 - fix(release): use draft release to allow asset upload before publishing by @naa0yama in https://github.com/naa0yama/gh-sync/pull/14
 
