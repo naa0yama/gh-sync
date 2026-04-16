@@ -3498,3 +3498,94 @@ fn print_preview_ruleset_update_no_live_data() {
     assert!(output.contains("rules.deletion"));
     assert!(output.contains("rules.required_signatures"));
 }
+
+// ------------------------------------------------------------------
+// apply: merge-method/title stripping (GitHub API 422 guard)
+// ------------------------------------------------------------------
+
+#[test]
+fn apply_core_fields_strips_merge_commit_fields_when_disabled() {
+    let spec = make_spec();
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.allow_merge_commit"),
+            old: String::from("true"),
+            new: String::from("false"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_title"),
+            old: String::from("MERGE_MESSAGE"),
+            new: String::from("PR_TITLE"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_message"),
+            old: String::from("BLANK"),
+            new: String::from("PR_TITLE"),
+        },
+    ];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 1);
+    assert_eq!(patches[0]["allow_merge_commit"], false);
+    assert!(patches[0].get("merge_commit_title").is_none());
+    assert!(patches[0].get("merge_commit_message").is_none());
+}
+
+#[test]
+fn apply_core_fields_strips_squash_fields_when_disabled() {
+    let spec = make_spec();
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.allow_squash_merge"),
+            old: String::from("true"),
+            new: String::from("false"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.squash_merge_commit_title"),
+            old: String::from("COMMIT_OR_PR_TITLE"),
+            new: String::from("PR_TITLE"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.squash_merge_commit_message"),
+            old: String::from("BLANK"),
+            new: String::from("PR_BODY"),
+        },
+    ];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 1);
+    assert_eq!(patches[0]["allow_squash_merge"], false);
+    assert!(patches[0].get("squash_merge_commit_title").is_none());
+    assert!(patches[0].get("squash_merge_commit_message").is_none());
+}
+
+#[test]
+fn apply_core_fields_keeps_merge_commit_fields_when_enabled() {
+    let spec = make_spec();
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.allow_merge_commit"),
+            old: String::from("false"),
+            new: String::from("true"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_title"),
+            old: String::from("MERGE_MESSAGE"),
+            new: String::from("PR_TITLE"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_message"),
+            old: String::from("BLANK"),
+            new: String::from("PR_TITLE"),
+        },
+    ];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 1);
+    assert_eq!(patches[0]["allow_merge_commit"], true);
+    assert_eq!(patches[0]["merge_commit_title"], "PR_TITLE");
+    assert_eq!(patches[0]["merge_commit_message"], "PR_TITLE");
+}
