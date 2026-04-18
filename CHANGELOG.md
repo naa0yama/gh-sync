@@ -1,11 +1,17 @@
 # Changelog
 
 ## [v0.2.1](https://github.com/naa0yama/gh-sync/compare/v0.2.0...v0.2.1) - 2026-04-18
+
 ### Features 🎉
+
 - feat(engine): add diff context header annotation to sync/ci-check diff output by @naa0yama in https://github.com/naa0yama/gh-sync/pull/30
+
 ### Dependency Updates 📦
+
 - Update Rust crate console to 0.16 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/8
+
 ### Development Environment 🔧
+
 - Update taiki-e/install-action action to v2.75.3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/23
 - Update taiki-e/install-action action to v2.75.4 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/26
 - Update dependency aqua:EmbarkStudios/cargo-deny to v0.19.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/28
