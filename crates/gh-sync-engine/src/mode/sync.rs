@@ -8,7 +8,10 @@ use anyhow::Context as _;
 use gh_sync_manifest::{self as manifest, Manifest, Strategy};
 
 use crate::diff::unified_diff;
-use crate::output::{RuleOutcome, StatusTag, Summary, emit_diff, emit_status, emit_summary};
+use crate::output::{
+    RuleOutcome, StatusTag, Summary, build_diff_context_header, emit_diff, emit_status,
+    emit_summary,
+};
 use crate::strategy::patch::PatchRunner;
 use crate::strategy::{self, StrategyResult};
 use crate::upstream::{FetchResult, UpstreamFetcher};
@@ -109,7 +112,14 @@ pub fn run(
         let diff = match &result {
             StrategyResult::Changed { content } => {
                 let old = local_bytes.as_deref().unwrap_or(b"");
-                unified_diff(&rule.path, old, content).unwrap_or_default()
+                let body = unified_diff(&rule.path, old, content).unwrap_or_default();
+                if body.is_empty() {
+                    String::new()
+                } else {
+                    let header =
+                        build_diff_context_header(&manifest.upstream.repo, &manifest.upstream.ref_);
+                    format!("{header}\n{body}")
+                }
             }
             _ => String::new(),
         };
@@ -284,6 +294,10 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
         assert!(matches!(code, ExitCode::SUCCESS), "expected SUCCESS: {out}");
         assert!(out.contains("[CHANGED]"), "missing CHANGED tag: {out}");
+        assert!(
+            out.contains("# a/ = local, b/ = upstream (owner/repo@main)"),
+            "missing diff context header: {out}"
+        );
         let written = std::fs::read(dir.path().join("ci.yml")).unwrap();
         assert_eq!(written, b"upstream content\n");
     }

@@ -57,7 +57,8 @@ fn test_cli_sync_file_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("manifest"))
-        .stdout(predicate::str::contains("dry-run"));
+        .stdout(predicate::str::contains("dry-run"))
+        .stdout(predicate::str::contains("naa0yama/boilerplate-rust@main"));
 }
 
 #[test]
@@ -68,7 +69,8 @@ fn test_cli_sync_repo_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("manifest"))
-        .stdout(predicate::str::contains("ci-check"));
+        .stdout(predicate::str::contains("ci-check"))
+        .stdout(predicate::str::contains("naa0yama/boilerplate-rust@main"));
 }
 
 #[test]
@@ -320,6 +322,46 @@ fn test_fake_gh_sync_repo_dry_run_no_drift_succeeds() {
             .or(predicate::str::contains("OK"))
             .or(predicate::str::contains("nothing")),
     );
+}
+
+/// Manifest for sync file ci-check drift tests (upstream/repo, replace strategy).
+const MANIFEST_FILE_DRIFT: &str = "\
+upstream:
+  repo: upstream/repo
+files:
+  - path: .github/ci.yml
+    strategy: replace
+";
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_fake_gh_sync_file_ci_check_diff_shows_context_header() {
+    // Arrange — write manifest and a local file that differs from upstream
+    let dir = tempfile::TempDir::new().unwrap();
+    let manifest = dir.path().join("config.yaml");
+    std::fs::write(&manifest, MANIFEST_FILE_DRIFT).unwrap();
+    // Create subdirectory and local file with different content than upstream
+    std::fs::create_dir_all(dir.path().join(".github")).unwrap();
+    std::fs::write(dir.path().join(".github/ci.yml"), b"local content\n").unwrap();
+
+    // Act — run `gh-sync sync file --ci-check` from the temp repo root
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["sync", "file", "--ci-check", "--manifest"])
+        .arg(&manifest)
+        .current_dir(dir.path())
+        .env("PATH", path_with_fake_gh())
+        .env(
+            "GH_FAKE_SCENARIO",
+            scenario("sync_file_ci_check_drift.json"),
+        );
+
+    // Assert — exits 1 (drift detected) and diff header is present
+    cmd.assert()
+        .failure()
+        .stdout(predicate::str::contains("[DRIFT"))
+        .stdout(predicate::str::contains(
+            "# a/ = local, b/ = upstream (upstream/repo@main)",
+        ));
 }
 
 #[test]

@@ -8,8 +8,8 @@ use gh_sync_manifest::{self as manifest, Manifest, Rule, Strategy};
 
 use crate::diff::unified_diff;
 use crate::output::{
-    DriftOutcome, StatusTag, Summary, build_pr_comment, emit_diff, emit_drift_summary,
-    emit_gha_annotations, emit_status,
+    DriftOutcome, StatusTag, Summary, build_diff_context_header, build_pr_comment, emit_diff,
+    emit_drift_summary, emit_gha_annotations, emit_status,
 };
 use crate::strategy::patch::PatchRunner;
 use crate::strategy::{self, StrategyResult};
@@ -178,7 +178,14 @@ fn evaluate_drift(
             if local_content == expected.as_slice() {
                 (false, String::from("up to date"), String::new(), false)
             } else {
-                let diff = unified_diff(&rule.path, local_content, &expected).unwrap_or_default();
+                let body = unified_diff(&rule.path, local_content, &expected).unwrap_or_default();
+                let diff = if body.is_empty() {
+                    String::new()
+                } else {
+                    let header =
+                        build_diff_context_header(&manifest.upstream.repo, &manifest.upstream.ref_);
+                    format!("{header}\n{body}")
+                };
                 (true, String::from("upstream has changes"), diff, false)
             }
         }
@@ -315,6 +322,10 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
         assert!(matches!(code, ExitCode::FAILURE), "expected FAILURE: {out}");
         assert!(out.contains("[DRIFT"), "expected DRIFT: {out}");
+        assert!(
+            out.contains("# a/ = local, b/ = upstream (owner/repo@main)"),
+            "missing diff context header: {out}"
+        );
     }
 
     #[test]

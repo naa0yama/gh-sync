@@ -109,6 +109,7 @@ pub fn run(
                 Ok(FetchResult::Content(bytes)) => bytes,
             };
 
+        // old=upstream, new=local: output is a patch to apply to upstream to reproduce local state
         let diff = match unified_diff(&rule.path, &upstream, &local_bytes) {
             Ok(d) => d,
             Err(e) => {

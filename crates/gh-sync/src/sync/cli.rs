@@ -39,6 +39,9 @@ pub struct SyncFileArgs {
     /// merged with the local manifest (local wins on conflicting paths).
     /// If the local manifest file does not exist only the upstream manifest
     /// is used.
+    ///
+    /// Example:
+    ///   gh-sync sync file --upstream-manifest naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
     #[arg(long = "upstream-manifest", value_name = "OWNER/REPO@REF:PATH")]
     pub upstream_manifest: Option<String>,
 
@@ -82,6 +85,9 @@ pub struct SyncRepoArgs {
     /// merged with the local manifest (local wins on conflicting paths).
     /// If the local manifest file does not exist only the upstream manifest
     /// is used.
+    ///
+    /// Example:
+    ///   gh-sync sync repo --upstream-manifest naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
     #[arg(long = "upstream-manifest", value_name = "OWNER/REPO@REF:PATH")]
     pub upstream_manifest: Option<String>,
 
