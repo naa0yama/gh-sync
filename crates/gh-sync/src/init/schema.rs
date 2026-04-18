@@ -30,7 +30,7 @@ pub const SCHEMA_JSON: &str = r#"{
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Repository settings — compatible with gh-infra Kind: Repository spec (all fields optional)",
+      "description": "Repository settings — compatible (all fields optional)",
       "properties": {
         "description": {
           "type": "string",
@@ -53,6 +53,10 @@ pub const SCHEMA_JSON: &str = r#"{
           "type": "array",
           "items": { "type": "string" },
           "description": "Topic tags (full list, not additive)"
+        },
+        "web_commit_signoff_required": {
+          "type": "boolean",
+          "description": "Require contributors to sign off on web-based commits"
         },
         "release_immutability": {
           "type": "boolean",
@@ -96,11 +100,13 @@ pub const SCHEMA_JSON: &str = r#"{
             "allow_merge_commit":           { "type": "boolean" },
             "allow_squash_merge":           { "type": "boolean" },
             "allow_rebase_merge":           { "type": "boolean" },
+            "allow_auto_merge":             { "type": "boolean", "description": "Automatically merge when all checks pass" },
+            "allow_update_branch":          { "type": "boolean", "description": "Allow updating PR branches" },
             "auto_delete_head_branches":    { "type": "boolean" },
-            "merge_commit_title":           { "type": "string" },
-            "merge_commit_message":         { "type": "string" },
-            "squash_merge_commit_title":    { "type": "string" },
-            "squash_merge_commit_message":  { "type": "string" }
+            "merge_commit_title":          { "type": "string", "enum": ["PR_TITLE", "MERGE_MESSAGE"], "description": "Title format for merge commits" },
+            "merge_commit_message":        { "type": "string", "enum": ["PR_BODY", "PR_TITLE", "BLANK"], "description": "Body format for merge commits" },
+            "squash_merge_commit_title":   { "type": "string", "enum": ["PR_TITLE", "COMMIT_OR_PR_TITLE"], "description": "Title format for squash commits" },
+            "squash_merge_commit_message": { "type": "string", "enum": ["PR_BODY", "COMMIT_MESSAGES", "BLANK"], "description": "Body format for squash commits" }
           }
         },
         "actions": {
@@ -179,7 +185,7 @@ pub const SCHEMA_JSON: &str = r#"{
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "role":         { "type": "string" },
+                    "role":         { "type": "string", "enum": ["admin", "maintain", "write", "triage", "read"], "description": "Built-in repository role that may bypass the ruleset" },
                     "team":         { "type": "string" },
                     "app":          { "type": "string" },
                     "org-admin":    { "type": "boolean" },
@@ -218,7 +224,19 @@ pub const SCHEMA_JSON: &str = r#"{
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                      "required_approving_review_count": { "type": "integer", "minimum": 0 }
+                      "required_approving_review_count": { "type": "integer", "minimum": 0 },
+                      "dismiss_stale_reviews_on_push":   { "type": "boolean" },
+                      "require_code_owner_review":       { "type": "boolean" },
+                      "require_last_push_approval":      { "type": "boolean" },
+                      "required_review_thread_resolution": { "type": "boolean" },
+                      "allowed_merge_methods": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": ["squash", "merge", "rebase"]
+                        },
+                        "description": "Merge methods allowed for pull requests"
+                      }
                     }
                   },
                   "required_status_checks": {
@@ -233,8 +251,9 @@ pub const SCHEMA_JSON: &str = r#"{
                           "required": ["context"],
                           "additionalProperties": false,
                           "properties": {
-                            "context": { "type": "string" },
-                            "app":     { "type": "string" }
+                            "context":        { "type": "string" },
+                            "app":            { "type": "string" },
+                            "integration_id": { "type": "integer", "description": "GitHub App integration ID resolved from the app slug" }
                           }
                         }
                       }
