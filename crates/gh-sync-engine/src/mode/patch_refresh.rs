@@ -5,10 +5,11 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use anyhow::Context as _;
-use gh_sync_manifest::{self as manifest, Manifest, Strategy};
+use gh_sync_manifest::{self as manifest, Manifest, Rule, Strategy};
 
 use crate::diff::unified_diff;
 use crate::output::{StatusTag, emit_status};
+use crate::strategy::markers::strip_marker_blocks;
 use crate::upstream::{FetchResult, UpstreamFetcher};
 
 // ---------------------------------------------------------------------------
@@ -52,6 +53,131 @@ fn write_patch(repo_root: &Path, patch_path: &str, content: &str) -> anyhow::Res
     Ok(WriteOutcome::Written)
 }
 
+/// Strip marker blocks from `bytes`, discarding the extracted blocks.
+///
+/// `side` (`"upstream"` or `"local"`) is included in the error message so the
+/// caller can tell which input failed validation.
+fn strip_markers(bytes: &[u8], side: &str) -> Result<Vec<u8>, String> {
+    strip_marker_blocks(bytes)
+        .map(|(s, _)| s)
+        .map_err(|e| format!("invalid marker block ({side}): {e}"))
+}
+
+/// Process one patch rule. Returns `true` when an error was encountered.
+///
+/// # Errors
+/// Propagates I/O errors from `w`.
+fn process_rule(
+    rule: &Rule,
+    manifest: &Manifest,
+    repo_root: &Path,
+    fetcher: &dyn UpstreamFetcher,
+    w: &mut dyn Write,
+) -> std::io::Result<bool> {
+    let local_bytes = std::fs::read(repo_root.join(&rule.path)).unwrap_or_default();
+
+    let upstream = match fetcher.fetch(&manifest.upstream.repo, &manifest.upstream.ref_, &rule.path)
+    {
+        Err(e) => {
+            emit_status(
+                w,
+                StatusTag::Fail,
+                &rule.path,
+                rule.strategy,
+                Some(&format!("fetch error: {e}")),
+            )?;
+            return Ok(true);
+        }
+        Ok(FetchResult::NotFound) => {
+            emit_status(
+                w,
+                StatusTag::Fail,
+                &rule.path,
+                rule.strategy,
+                Some(&format!("upstream path not found: {}", rule.path)),
+            )?;
+            return Ok(true);
+        }
+        Ok(FetchResult::Content(bytes)) => bytes,
+    };
+
+    // old=upstream, new=local: patch applies upstream → local.
+    // When preserve_markers is true, strip marker blocks from both sides before
+    // diffing so that marker-protected regions on either side are excluded.
+    let (effective_upstream, effective_local) = if rule.preserve_markers == Some(true) {
+        let up = match strip_markers(&upstream, "upstream") {
+            Ok(s) => s,
+            Err(msg) => {
+                emit_status(w, StatusTag::Fail, &rule.path, rule.strategy, Some(&msg))?;
+                return Ok(true);
+            }
+        };
+        let lo = match strip_markers(&local_bytes, "local") {
+            Ok(s) => s,
+            Err(msg) => {
+                emit_status(w, StatusTag::Fail, &rule.path, rule.strategy, Some(&msg))?;
+                return Ok(true);
+            }
+        };
+        (up, lo)
+    } else {
+        (upstream, local_bytes)
+    };
+
+    let diff = match unified_diff(&rule.path, &effective_upstream, &effective_local) {
+        Ok(d) => d,
+        Err(e) => {
+            emit_status(
+                w,
+                StatusTag::Fail,
+                &rule.path,
+                rule.strategy,
+                Some(&format!("diff error: {e}")),
+            )?;
+            return Ok(true);
+        }
+    };
+
+    let patch_path = manifest::resolve_patch_path(rule);
+    match write_patch(repo_root, &patch_path, &diff) {
+        Ok(WriteOutcome::Unchanged) => {
+            emit_status(
+                w,
+                StatusTag::Ok,
+                &rule.path,
+                rule.strategy,
+                Some("no changes"),
+            )?;
+        }
+        Ok(WriteOutcome::Written) => {
+            let detail = if diff.is_empty() {
+                format!("wrote {patch_path} (empty: local matches upstream)")
+            } else {
+                format!("wrote {patch_path}")
+            };
+            emit_status(
+                w,
+                StatusTag::Changed,
+                &rule.path,
+                rule.strategy,
+                Some(&detail),
+            )?;
+        }
+        Err(e) => {
+            emit_status(
+                w,
+                StatusTag::Fail,
+                &rule.path,
+                rule.strategy,
+                Some(&e.to_string()),
+            )?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 /// Regenerate `.patch` files for all `strategy: patch` rules.
 ///
 /// For each patch rule:
@@ -78,88 +204,8 @@ pub fn run(
         if rule.strategy != Strategy::Patch {
             continue;
         }
-
-        let local_path = repo_root.join(&rule.path);
-        let local_bytes = std::fs::read(&local_path).unwrap_or_default();
-
-        let upstream =
-            match fetcher.fetch(&manifest.upstream.repo, &manifest.upstream.ref_, &rule.path) {
-                Err(e) => {
-                    emit_status(
-                        w,
-                        StatusTag::Fail,
-                        &rule.path,
-                        rule.strategy,
-                        Some(&format!("fetch error: {e}")),
-                    )?;
-                    has_error = true;
-                    continue;
-                }
-                Ok(FetchResult::NotFound) => {
-                    emit_status(
-                        w,
-                        StatusTag::Fail,
-                        &rule.path,
-                        rule.strategy,
-                        Some(&format!("upstream path not found: {}", rule.path)),
-                    )?;
-                    has_error = true;
-                    continue;
-                }
-                Ok(FetchResult::Content(bytes)) => bytes,
-            };
-
-        // old=upstream, new=local: output is a patch to apply to upstream to reproduce local state
-        let diff = match unified_diff(&rule.path, &upstream, &local_bytes) {
-            Ok(d) => d,
-            Err(e) => {
-                emit_status(
-                    w,
-                    StatusTag::Fail,
-                    &rule.path,
-                    rule.strategy,
-                    Some(&format!("diff error: {e}")),
-                )?;
-                has_error = true;
-                continue;
-            }
-        };
-
-        let patch_path = manifest::resolve_patch_path(rule);
-        match write_patch(repo_root, &patch_path, &diff) {
-            Ok(WriteOutcome::Unchanged) => {
-                emit_status(
-                    w,
-                    StatusTag::Ok,
-                    &rule.path,
-                    rule.strategy,
-                    Some("no changes"),
-                )?;
-            }
-            Ok(WriteOutcome::Written) => {
-                let detail = if diff.is_empty() {
-                    format!("wrote {patch_path} (empty: local matches upstream)")
-                } else {
-                    format!("wrote {patch_path}")
-                };
-                emit_status(
-                    w,
-                    StatusTag::Changed,
-                    &rule.path,
-                    rule.strategy,
-                    Some(&detail),
-                )?;
-            }
-            Err(e) => {
-                emit_status(
-                    w,
-                    StatusTag::Fail,
-                    &rule.path,
-                    rule.strategy,
-                    Some(&e.to_string()),
-                )?;
-                has_error = true;
-            }
+        if process_rule(rule, manifest, repo_root, fetcher, w)? {
+            has_error = true;
         }
     }
 
@@ -203,6 +249,7 @@ mod tests {
             strategy: Strategy::Patch,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -212,6 +259,7 @@ mod tests {
             strategy: Strategy::Replace,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 

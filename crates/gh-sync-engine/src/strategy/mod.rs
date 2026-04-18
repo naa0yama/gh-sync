@@ -2,6 +2,8 @@
 pub mod create_only;
 /// `delete` strategy: explicitly remove a local file or directory.
 pub mod delete;
+/// Marker-block stripping for `preserve_markers` mode.
+pub mod markers;
 /// `patch` strategy: apply a unified diff on top of upstream content.
 pub mod patch;
 /// `replace` strategy: overwrite local file with upstream content.

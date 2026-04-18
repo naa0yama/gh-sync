@@ -383,6 +383,7 @@ mod tests {
             strategy,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 

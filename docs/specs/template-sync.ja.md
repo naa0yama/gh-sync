@@ -233,9 +233,10 @@ rules:
 
 #### `patch` 戦略の追加フィールド
 
-| フィールド | 型     | 必須   | デフォルト                             | 説明                                                    |
-| ---------- | ------ | ------ | -------------------------------------- | ------------------------------------------------------- |
-| `patch`    | string | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対) |
+| フィールド         | 型      | 必須   | デフォルト                             | 説明                                                                                   |
+| ------------------ | ------- | ------ | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `patch`            | string  | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対)                                |
+| `preserve_markers` | boolean | いいえ | `false`                                | `true` にすると `gh-sync:keep-start` / `gh-sync:keep-end` で囲まれたブロックを保護する |
 
 省略時は `path` をそのまま使い慣例パスを自動解決する。
 慣例から外れる配置にしたい場合のみ明示指定する:
@@ -258,7 +259,7 @@ rules:
 
 - `delete`: `source`, `patch` フィールド不可
 - `patch`: `source` フィールド不可
-- `replace`, `create_only`: `patch` フィールド不可
+- `replace`, `create_only`, `delete`, `ignore`: `patch`, `preserve_markers` フィールド不可
 - いずれのルールでも未知のフィールドはバリデーションエラー
 
 ### 2.3 パスの制約
@@ -534,10 +535,11 @@ upstream ファイルを取得し、ローカルの unified diff パッチを適
 3. upstream の内容を一時ファイルに書き込み
 4. 一時ファイルに `patch -p0 --no-backup-if-mismatch < patchfile` を実行
 5. パッチ適用後の結果を読み取り
-6. 現在のローカルファイルと比較
+6. `preserve_markers: true` の場合、upstream とローカルファイルの**両方**からマーカーブロックを除去した状態で比較
 7. 同一 → `Unchanged` を返す
-8. パッチ結果をローカルパスに書き込み
-9. `Changed` を返す
+8. `preserve_markers: true` の場合、パッチ結果にローカルのマーカーブロックを復元してから書き込み
+9. パッチ結果をローカルパスに書き込み
+10. `Changed` を返す
 
 #### パッチファイル形式
 
@@ -671,7 +673,7 @@ patch ファイルを自動生成(上書き)する。patch ファイルを手書
 2. `strategy: patch` のルールのみ対象
 3. upstream ファイルを取得
 4. ローカルファイルを読み取り(存在しない場合は空として扱う)
-5. `diff -u <upstream> <local>` を実行
+5. `preserve_markers: true` の場合、upstream とローカルの両方からマーカーブロックを除去してから `diff -u` を実行する。それ以外の場合は素の `diff -u <upstream> <local>` を実行する
 6. 差分がなければ `Unchanged`(patch ファイルは更新しない)
 7. 解決済みパス(省略時は慣例パス)に unified diff を書き込み
 8. 親ディレクトリが存在しない場合は作成
@@ -723,20 +725,24 @@ commit / PR 操作はこのコマンドでは行わない — skill 経由で Cl
 
 ### 5.4 `gh-sync init` フラグ
 
-| フラグ            | 短縮 | 型   | デフォルト                    | 説明                                                       |
-| ----------------- | ---- | ---- | ----------------------------- | ---------------------------------------------------------- |
-| `--repo`          | `-r` | str  | —(TTY の場合はプロンプト)     | upstream リポジトリ(`owner/name` 形式)                     |
-| `--ref`           |      | str  | `main`                        | 取得元の git ref                                           |
-| `--output`        | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス                                                 |
-| `--from-upstream` |      | bool | false                         | upstream 自身の config をコピー(非対話モード可)            |
-| `--select`        |      | bool | false                         | upstream のファイル一覧から対話的に選択                    |
-| `--with-workflow` |      | bool | false                         | `.github/workflows/gh-sync.yaml` を同時生成 (詳細は §11.3) |
-| `--force`         |      | bool | false                         | 既存ファイルを確認なしで上書き                             |
+| フラグ         | 短縮 | 型   | デフォルト                    | 説明                                                                           |
+| -------------- | ---- | ---- | ----------------------------- | ------------------------------------------------------------------------------ |
+| `--repo`       | `-r` | str  | —(TTY の場合はプロンプト)     | 対象リポジトリ(`owner/name` 形式)                                              |
+| `--ref`        |      | str  | `main`                        | 取得元の git ref                                                               |
+| `--upstream`   |      | bool | false                         | upstream モード: `config.yaml` と `schema.json` を生成 (`--downstream` と排他) |
+| `--downstream` |      | bool | false                         | downstream モード: `gh-sync.yaml` ワークフローを生成 (`--upstream` と排他)     |
+| `--select`     |      | bool | false                         | upstream のファイル一覧から対話的に選択 (`--upstream` 専用)                    |
+| `--with-skill` |      | bool | false                         | `.claude/skills/gh-sync/SKILL.md` を生成 (`--downstream` 専用)                 |
+| `--output`     | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス (`--upstream` 専用)                                                 |
+| `--force`      |      | bool | false                         | 既存ファイルを確認なしで上書き                                                 |
 
-`--from-upstream` と `--select` は相互排他。どちらも指定しない場合、TTY であればモード選択プロンプトを表示する。
+`--upstream` と `--downstream` はどちらか一方が必須(相互排他)。
+
+- `--upstream` モード: `config.yaml` と `schema.json` を生成する。ワークフローや skill ファイルは生成しない。
+- `--downstream` モード: `.github/workflows/gh-sync.yaml` を生成する。`config.yaml` は生成しない。`--with-skill` を指定すると、さらに `.claude/skills/gh-sync/SKILL.md` を生成し、marker 記法の使い方を Claude Code に伝えるスキルファイルを追加する。
 
 config ファイルと同ディレクトリに `schema.json` (JSON Schema) を生成し、
-yaml-language-server 対応エディタで補完・バリデーションが有効になる。
+yaml-language-server 対応エディタで補完・バリデーションが有効になる(`--upstream` モードのみ)。
 
 config が不在の状態で `gh-sync sync` を実行した場合、エラーメッセージに
 `gh-sync init` 実行のヒントを表示する。
@@ -977,19 +983,24 @@ Run `gh-sync sync` locally to apply upstream changes.
 | `manifest`          |    no    | `.github/gh-sync/config.yaml` | 同期設定ファイルのパス                                                     |
 | `upstream-manifest` |    no    | —                             | upstream マニフェスト参照 (`owner/repo@ref:path` 形式)。詳細は第 12 章参照 |
 
-### 11.3 gh-sync init --with-workflow
+### 11.3 gh-sync init --downstream
 
-`gh-sync init` に `--with-workflow` フラグを追加。config.yaml・schema.json の生成に加えて
-`.github/workflows/gh-sync.yaml` を生成する。
+`gh-sync init --downstream` は `.github/workflows/gh-sync.yaml` を生成する。
+`config.yaml` / `schema.json` は生成しない (upstream モードの生成物)。
 
-- 非インタラクティブ (`stdin` が TTY でない) 時は `--with-workflow` を明示した場合のみ生成。
+- 非インタラクティブ (`stdin` が TTY でない) 時は `--downstream` を明示した場合のみ生成。
 - TTY 時はモード選択後にインタラクティブな確認プロンプトを表示する。
 - 既存ファイルがある場合は `--force` がなければ上書き確認を行う (非 TTY では bail)。
 - 埋め込まれるバージョンは `gh-sync` 実行時の `CARGO_PKG_VERSION` (例: `v0.1.3`)。
+- `--with-skill` を付けると `.claude/skills/gh-sync/SKILL.md` を追加生成し、
+  marker 記法 (`gh-sync:keep-start` / `gh-sync:keep-end`) の使い方を Claude Code に伝える。
 
 ```bash
-# 非インタラクティブ例
-gh-sync init --repo naa0yama/boilerplate-rust --from-upstream --with-workflow --force
+# 非インタラクティブ例 (ワークフローのみ生成)
+gh-sync init --downstream --repo naa0yama/boilerplate-rust --force
+
+# skill ファイルも同時に生成する場合
+gh-sync init --downstream --repo naa0yama/boilerplate-rust --with-skill --force
 ```
 
 生成される `.github/workflows/gh-sync.yaml` の内容 (`--repo owner/repo` 指定時):
@@ -1115,6 +1126,89 @@ files:
 - `source` フィールドは指定できない (`delete` と同じ制約)
 - `patch` フィールドは指定できない
 - ドリフト検知・sync の両対象から除外される (patch ファイルの存在チェックも対象外)
+
+### 12.5.1 preserve_markers — ファイル内マーカーでブロックを保護
+
+`preserve_markers` は `strategy: patch` ルール専用のオプションフィールドで、downstream のファイル内に
+マーカーコメントを書いてブロックを保護する仕組みを有効にする。
+
+```yaml
+# local overlay (.github/gh-sync/config.yaml)
+files:
+  - path: Cargo.toml
+    strategy: patch
+    preserve_markers: true
+```
+
+#### マーカー構文
+
+ファイル内に以下の 2 行でブロックを囲む:
+
+| 行に含まれるトークン | 役割               |
+| -------------------- | ------------------ |
+| `gh-sync:keep-start` | 保護ブロックの開始 |
+| `gh-sync:keep-end`   | 保護ブロックの終了 |
+
+コメント記号 (`#`, `//` 等) は無関係 — 行内にトークンが含まれているかどうかだけを判定する。
+TOML (`#`)、Shell (`#`)、JSONC (`//`) のいずれでも使用できる。
+
+例: `Cargo.toml` (TOML):
+
+```toml
+[workspace]
+# gh-sync:keep-start
+members = ["crates/gh-sync", "crates/gh-sync-engine", "crates/gh-sync-manifest"]
+# gh-sync:keep-end
+
+[workspace.package]
+# gh-sync:keep-start
+version = "0.2.1"
+# gh-sync:keep-end
+edition = "2021"
+```
+
+例: `.vscode/launch.json` (JSONC):
+
+```jsonc
+{
+	"configurations": [
+		{
+			// gh-sync:keep-start
+			"name": "Debug gh-sync",
+			"cargo": { "args": ["build", "--bin=gh-sync"] }
+			// gh-sync:keep-end
+		}
+	]
+}
+```
+
+#### 動作セマンティクス
+
+| フェーズ                           | 動作                                                                                                                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sync --patch-refresh`             | upstream とローカルの**両方**のマーカーブロックを除去してから `diff -u` を実行する。生成される `.patch` ファイルにマーカー内の差分は含まれない。upstream 側もマーカーを "編集可能領域" として事前配置できる。 |
+| ドリフト検知 (`sync` / `ci-check`) | upstream とローカルの**両方**のマーカーブロックを除去した状態で patch 適用結果と比較する。マーカー内の変化は `Unchanged` と判定される。                                                                       |
+| 書き戻し (`sync --apply-files`)    | upstream に patch を適用した結果に、local のマーカーブロックをそのまま復元して書き込む。マーカー内の内容は upstream 変更の影響を受けない。                                                                    |
+
+#### エラー
+
+| 状況                                                 | 動作                            |
+| ---------------------------------------------------- | ------------------------------- |
+| `keep-start` のみで `keep-end` がない (またはその逆) | sync を停止してエラーを報告する |
+| マーカーのネスト (`keep-start` 内に `keep-start`)    | sync を停止してエラーを報告する |
+
+#### `strategy: ignore` との使い分け
+
+| 方式                     | 対象                             | downstream のファイルが存在するか         |
+| ------------------------ | -------------------------------- | ----------------------------------------- |
+| `strategy: ignore`       | ファイル丸ごと除外               | upstream から取得しない                   |
+| `preserve_markers: true` | ファイル内の特定ブロックだけ保護 | upstream と同期しつつ、保護ブロックは維持 |
+
+**制約:**
+
+- `strategy: patch` でのみ有効。他の strategy と組み合わせるとスキーマエラーになる。
+- マーカーのネストは禁止。
+- マーカーのペアが一致しない (orphan) 場合は sync が停止する。
 
 ### 12.6 GitHub Actions での使用例
 

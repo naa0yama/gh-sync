@@ -93,6 +93,7 @@ fn merge_files(upstream: Vec<Rule>, local: Vec<Rule>) -> Vec<Rule> {
                     strategy: local_rule.strategy,
                     source: local_rule.source.clone(),
                     patch: local_rule.patch.clone(),
+                    preserve_markers: local_rule.preserve_markers,
                 });
             }
         } else {
@@ -129,6 +130,7 @@ mod tests {
             strategy,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -138,6 +140,7 @@ mod tests {
             strategy,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 

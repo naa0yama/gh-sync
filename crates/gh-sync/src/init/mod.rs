@@ -1,13 +1,13 @@
 /// CLI argument definitions for the `init` subcommand.
 pub mod cli;
-/// Mode A: copy the upstream's own gh-sync config.
-mod copy;
-/// Mode B: interactively generate a config from an upstream file listing.
+/// Interactively generate a config from an upstream file listing.
 mod generate;
 /// JSON Schema constant and writer helper.
 pub mod schema;
 /// Interactive file + strategy picker widget.
 mod select;
+/// Claude Code skill file generator.
+mod skill;
 /// GitHub Actions workflow template generator.
 pub mod workflow;
 
@@ -19,16 +19,6 @@ use anyhow::Context as _;
 use cli::InitArgs;
 
 use crate::sync::upstream::GhFetcher;
-
-// ---------------------------------------------------------------------------
-// Mode enum — defined at module level to avoid `items_after_statements`
-// ---------------------------------------------------------------------------
-
-#[derive(Debug)]
-enum Mode {
-    FromUpstream,
-    Select,
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,6 +53,54 @@ fn validate_repo_format(repo: &str) -> anyhow::Result<()> {
             "invalid repository '{repo}': must be owner/name format \
              (e.g. naa0yama/boilerplate-rust)"
         )
+    }
+}
+
+/// Write `content` to `path`, creating parent directories as needed.
+///
+/// # Errors
+///
+/// Returns an error when directory creation or file write fails.
+fn write_file(path: &Path, content: &str) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory '{}'", parent.display()))?;
+    }
+    std::fs::write(path, content).with_context(|| format!("failed to write '{}'", path.display()))
+}
+
+/// Resolve the repository argument, prompting interactively when not provided.
+///
+/// # Errors
+///
+/// Returns an error when the repo format is invalid, the prompt is cancelled,
+/// or `--repo` is absent in non-interactive mode.
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn resolve_repo(args: &InitArgs, prompt: &str, non_tty_example: &str) -> anyhow::Result<String> {
+    match &args.repo {
+        Some(r) => {
+            validate_repo_format(r)?;
+            Ok(r.clone())
+        }
+        None => {
+            if io::stdin().is_terminal() {
+                dialoguer::Input::<String>::new()
+                    .with_prompt(prompt)
+                    .validate_with(|input: &String| -> Result<(), &str> {
+                        if is_valid_repo(input) {
+                            Ok(())
+                        } else {
+                            Err("must be owner/name format (e.g. naa0yama/boilerplate-rust)")
+                        }
+                    })
+                    .interact_text()
+                    .context("repo prompt cancelled")
+            } else {
+                anyhow::bail!(
+                    "--repo is required in non-interactive mode\nexample: {non_tty_example}"
+                )
+            }
+        }
     }
 }
 
@@ -151,51 +189,58 @@ fn confirm_overwrite_with_diff(
 
 /// Execute the `init` subcommand.
 ///
-/// Writes a new gh-sync config file (and `schema.json`) to the
-/// output path, creating parent directories as needed.
+/// Writes files appropriate to the selected mode (upstream or downstream).
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn execute(args: &InitArgs) -> ExitCode {
     match run(args, &GhFetcher) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            // {e:#} prints the full error chain (context: cause: root cause)
             tracing::error!("init failed: {e:#}");
             ExitCode::FAILURE
         }
     }
 }
 
-/// Core logic for `init`, parameterised over the upstream fetcher for
-/// testability.
+/// Core logic for `init`, dispatching to upstream or downstream mode.
 ///
 /// # Errors
 ///
-/// Returns an error when:
-/// - The output file already exists and the user declines to overwrite it.
-/// - The repo cannot be determined (no `--repo` flag, no TTY).
-/// - Upstream fetching fails.
-/// - The output file cannot be written.
-#[allow(clippy::too_many_lines)]
+/// Returns an error when the selected mode fails.
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn run(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
 ) -> anyhow::Result<()> {
-    // Dispatch to workflow-only mode when --with-workflow is set.
-    if args.with_workflow {
-        return run_workflow_only(args, fetcher);
+    if args.upstream {
+        run_upstream(args, fetcher)
+    } else {
+        run_downstream(args, fetcher)
     }
+}
+
+/// Upstream mode: generate `config.yaml` + `schema.json` for a template project.
+///
+/// # Errors
+///
+/// Returns an error when the repo cannot be determined, fetching fails,
+/// or the output file cannot be written.
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn run_upstream(
+    args: &InitArgs,
+    fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
+) -> anyhow::Result<()> {
+    let output = args
+        .output
+        .as_deref()
+        .unwrap_or_else(|| Path::new(".github/gh-sync/config.yaml"));
 
     // -----------------------------------------------------------------------
     // 1. Check for existing output file
     // -----------------------------------------------------------------------
-    if args.output.exists() && !args.force {
+    if output.exists() && !args.force {
         if io::stdin().is_terminal() {
             let confirmed = dialoguer::Confirm::new()
-                .with_prompt(format!(
-                    "'{}' already exists. Overwrite?",
-                    args.output.display()
-                ))
+                .with_prompt(format!("'{}' already exists. Overwrite?", output.display()))
                 .default(false)
                 .interact()
                 .context("confirmation prompt cancelled")?;
@@ -207,7 +252,7 @@ pub fn run(
         } else {
             anyhow::bail!(
                 "'{}' already exists; use --force to overwrite",
-                args.output.display()
+                output.display()
             );
         }
     }
@@ -215,87 +260,39 @@ pub fn run(
     // -----------------------------------------------------------------------
     // 2. Determine repo
     // -----------------------------------------------------------------------
-    let repo = match &args.repo {
-        Some(r) => {
-            validate_repo_format(r)?;
-            r.clone()
-        }
-        None => {
-            if io::stdin().is_terminal() {
-                dialoguer::Input::<String>::new()
-                    .with_prompt("Upstream repository (owner/name)")
-                    .validate_with(|input: &String| -> Result<(), &str> {
-                        if is_valid_repo(input) {
-                            Ok(())
-                        } else {
-                            Err("must be owner/name format (e.g. naa0yama/boilerplate-rust)")
-                        }
-                    })
-                    .interact_text()
-                    .context("repo prompt cancelled")?
-            } else {
-                anyhow::bail!(
-                    "--repo is required in non-interactive mode\n\
-                     example: gh-sync init --repo owner/name --from-upstream"
-                );
-            }
-        }
-    };
+    let repo = resolve_repo(
+        args,
+        "Upstream repository (owner/name)",
+        "gh-sync init --upstream --repo owner/name --select",
+    )?;
 
     // -----------------------------------------------------------------------
-    // 3. Determine mode
+    // 3. Determine mode and generate config content
     // -----------------------------------------------------------------------
-    let mode = if args.from_upstream {
-        Mode::FromUpstream
-    } else if args.select {
-        Mode::Select
-    } else if io::stdin().is_terminal() {
-        let choices = [
-            "Copy upstream's gh-sync config",
-            "Select files interactively",
-        ];
-        let idx = dialoguer::Select::new()
-            .with_prompt("How would you like to create the config?")
-            .items(choices)
-            .default(0)
-            .interact()
-            .context("mode selection cancelled")?;
-        if idx == 0 {
-            Mode::FromUpstream
-        } else {
-            Mode::Select
-        }
+    let content = if args.select || io::stdin().is_terminal() {
+        generate::run_interactive(fetcher, &repo, &args.ref_, "")?
     } else {
         anyhow::bail!(
-            "no mode specified; use --from-upstream or --select\n\
-             example: gh-sync init --repo owner/name --from-upstream"
+            "no mode specified; use --select\n\
+             example: gh-sync init --upstream --repo owner/name --select"
         );
     };
 
     // -----------------------------------------------------------------------
-    // 4. Generate config content
+    // 4. Write output file and schema.json
     // -----------------------------------------------------------------------
-    let content = match mode {
-        Mode::FromUpstream => copy::fetch_upstream_config(fetcher, &repo, &args.ref_)?,
-        Mode::Select => generate::run_interactive(fetcher, &repo, &args.ref_, "")?,
-    };
-
-    // -----------------------------------------------------------------------
-    // 5. Write output file and schema.json
-    // -----------------------------------------------------------------------
-    let output_dir = args.output.parent().unwrap_or_else(|| Path::new("."));
+    let output_dir = output.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(output_dir)
         .with_context(|| format!("failed to create directory '{}'", output_dir.display()))?;
 
-    std::fs::write(&args.output, &content)
-        .with_context(|| format!("failed to write '{}'", args.output.display()))?;
+    std::fs::write(output, &content)
+        .with_context(|| format!("failed to write '{}'", output.display()))?;
 
     schema::write_schema_file(output_dir)
         .with_context(|| format!("failed to write schema.json to '{}'", output_dir.display()))?;
 
     let mut stdout = io::stdout();
-    writeln!(stdout, "[OK] created '{}'", args.output.display())
-        .context("failed to write to stdout")?;
+    writeln!(stdout, "[OK] created '{}'", output.display()).context("failed to write to stdout")?;
     writeln!(
         stdout,
         "[OK] created '{}/schema.json'",
@@ -303,83 +300,69 @@ pub fn run(
     )
     .context("failed to write to stdout")?;
 
-    // -----------------------------------------------------------------------
-    // 6. Always generate the GitHub Actions workflow file
-    // -----------------------------------------------------------------------
-    let workflow_path = Path::new(workflow::WORKFLOW_PATH);
-    let version = concat!("v", env!("CARGO_PKG_VERSION"));
-
-    let sha = fetcher
-        .resolve_tag_sha("naa0yama/gh-sync", version)
-        .with_context(|| format!("failed to resolve SHA for naa0yama/gh-sync@{version}"))?;
-
-    let upstream_manifest = format!("{repo}@main:.github/gh-sync/config.yaml");
-    let rendered = workflow::render(version, &sha, Some(&upstream_manifest));
-
-    if confirm_overwrite_with_diff(workflow_path, &rendered, args.force)? {
-        workflow::write_workflow_from_content(workflow_path, &rendered)?;
-        writeln!(stdout, "[OK] created '{}'", workflow_path.display())
-            .context("failed to write to stdout")?;
-    }
-
     Ok(())
 }
 
-/// Workflow-only mode: generate (or update) the GitHub Actions workflow file
-/// without touching config or schema.
-///
-/// The `upstream-manifest` input is populated from the existing config file
-/// when present; otherwise the workflow is rendered with a commented-out
-/// placeholder.
+/// Downstream mode: generate the GitHub Actions workflow file and optionally
+/// a Claude Code skill file.
 ///
 /// # Errors
 ///
-/// Returns an error when the SHA cannot be resolved, the workflow file cannot
-/// be written, or the user declines to overwrite an existing file.
+/// Returns an error when the repo cannot be determined, the SHA cannot be
+/// resolved, or file writes fail.
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn run_workflow_only(
+fn run_downstream(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
 ) -> anyhow::Result<()> {
+    // -----------------------------------------------------------------------
+    // 1. Determine repo
+    // -----------------------------------------------------------------------
+    let repo = resolve_repo(
+        args,
+        "Upstream template repository (owner/name)",
+        "gh-sync init --downstream --repo owner/name",
+    )?;
+
+    // -----------------------------------------------------------------------
+    // 2. Resolve SHA and render workflow
+    // -----------------------------------------------------------------------
     let version = concat!("v", env!("CARGO_PKG_VERSION"));
 
-    // Resolve the release tag to a commit SHA.
     let sha = fetcher
         .resolve_tag_sha("naa0yama/gh-sync", version)
         .with_context(|| format!("failed to resolve SHA for naa0yama/gh-sync@{version}"))?;
 
-    // Attempt to read upstream info from the existing config file.
-    let config_path = Path::new(".github/gh-sync/config.yaml");
-    let upstream_manifest = read_upstream_manifest(config_path);
+    let upstream_manifest = format!("{repo}@{}:.github/gh-sync/config.yaml", args.ref_);
+    let rendered = workflow::render(version, &sha, Some(&upstream_manifest));
 
-    let rendered = workflow::render(version, &sha, upstream_manifest.as_deref());
-
+    // -----------------------------------------------------------------------
+    // 3. Write workflow file
+    // -----------------------------------------------------------------------
     let workflow_path = Path::new(workflow::WORKFLOW_PATH);
+    let mut stdout = io::stdout();
+
     if confirm_overwrite_with_diff(workflow_path, &rendered, args.force)? {
         workflow::write_workflow_from_content(workflow_path, &rendered)?;
-        let mut stdout = io::stdout();
         writeln!(stdout, "[OK] created '{}'", workflow_path.display())
             .context("failed to write to stdout")?;
     }
 
-    Ok(())
-}
+    // -----------------------------------------------------------------------
+    // 4. Optionally write Claude Code skill file
+    // -----------------------------------------------------------------------
+    if args.with_skill {
+        let skill_path = Path::new(skill::SKILL_PATH);
+        let skill_content = skill::render();
 
-/// Try to read `upstream-manifest` from an existing config file.
-///
-/// Returns `Some("owner/repo@ref:.github/gh-sync/config.yaml")` when the
-/// config file exists and can be parsed; `None` otherwise.
-fn read_upstream_manifest(config_path: &Path) -> Option<String> {
-    let Ok(content) = std::fs::read_to_string(config_path) else {
-        return None;
-    };
-    let Ok(manifest) = serde_yml::from_str::<gh_sync_manifest::manifest::Manifest>(&content) else {
-        return None;
-    };
-    Some(format!(
-        "{}@{}:.github/gh-sync/config.yaml",
-        manifest.upstream.repo, manifest.upstream.ref_
-    ))
+        if confirm_overwrite_with_diff(skill_path, &skill_content, args.force)? {
+            skill::write_skill_from_content(skill_path, &skill_content)?;
+            writeln!(stdout, "[OK] created '{}'", skill_path.display())
+                .context("failed to write to stdout")?;
+        }
+    }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -469,43 +452,5 @@ mod tests {
             msg.contains("--force"),
             "error should mention --force, got: {msg}"
         );
-    }
-
-    // ---------------------------------------------------------------------------
-    // read_upstream_manifest
-    // ---------------------------------------------------------------------------
-
-    #[test]
-    fn read_upstream_manifest_returns_none_for_missing_file() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("nonexistent.yaml");
-        assert!(read_upstream_manifest(&path).is_none());
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore = "libyml (C FFI) triggers UB under Miri")]
-    fn read_upstream_manifest_returns_none_for_invalid_yaml() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("bad.yaml");
-        std::fs::write(&path, b"not: valid: yaml: [").unwrap();
-        assert!(read_upstream_manifest(&path).is_none());
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore = "libyml (C FFI) triggers UB under Miri")]
-    fn read_upstream_manifest_parses_valid_config() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.yaml");
-        let yaml = "\
-upstream:
-  repo: owner/upstream
-  ref: main
-files:
-  - path: README.md
-    strategy: replace
-";
-        std::fs::write(&path, yaml).unwrap();
-        let result = read_upstream_manifest(&path).unwrap();
-        assert_eq!(result, "owner/upstream@main:.github/gh-sync/config.yaml");
     }
 }
