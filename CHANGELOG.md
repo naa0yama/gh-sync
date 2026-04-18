@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.2](https://github.com/naa0yama/gh-sync/compare/v0.2.1...v0.2.2) - 2026-04-18
+### Features 🎉
+- refactor(init): split into --upstream / --downstream modes by @naa0yama in https://github.com/naa0yama/gh-sync/pull/39
+
 ## [v0.2.1](https://github.com/naa0yama/gh-sync/compare/v0.2.0...v0.2.1) - 2026-04-18
 
 ### Features 🎉
