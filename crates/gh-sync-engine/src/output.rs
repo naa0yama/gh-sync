@@ -132,7 +132,10 @@ pub fn colorize_diff(diff: &str) -> String {
 
     diff.lines()
         .map(|line| {
-            if line.starts_with("---") || line.starts_with("+++") {
+            if line.starts_with('#') {
+                // Annotation comment (e.g. "# a/ = local, b/ = upstream ..."): dim
+                format!("{}\n", style(line).dim())
+            } else if line.starts_with("---") || line.starts_with("+++") {
                 // File header lines: bold
                 format!("{}\n", style(line).bold())
             } else if line.starts_with("@@") {
@@ -149,6 +152,15 @@ pub fn colorize_diff(diff: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Build the one-line annotation prepended to diff output to identify each side.
+///
+/// Returns `# a/ = local, b/ = upstream ({repo}@{ref})` without a trailing
+/// newline.  Callers are responsible for appending `\n` when concatenating.
+#[must_use]
+pub fn build_diff_context_header(upstream_repo: &str, upstream_ref: &str) -> String {
+    format!("# a/ = local, b/ = upstream ({upstream_repo}@{upstream_ref})")
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +454,42 @@ mod tests {
     // ------------------------------------------------------------------
     // emit_diff
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // colorize_diff comment lines
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn colorize_diff_passes_hash_line_through_without_colors() {
+        // Arrange
+        let diff = "# a/ = local, b/ = upstream (owner/repo@main)\n--- a/x\n+++ b/x\n";
+
+        // Act: colors disabled in test environment (no TTY)
+        let out = colorize_diff(diff);
+
+        // Assert: without colors the string is returned unchanged
+        assert_eq!(out, diff);
+    }
+
+    // ------------------------------------------------------------------
+    // build_diff_context_header
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn build_diff_context_header_contains_expected_parts() {
+        // Act
+        let h = build_diff_context_header("naa0yama/boilerplate-rust", "main");
+
+        // Assert
+        assert!(h.starts_with('#'), "must start with #: {h}");
+        assert!(h.contains("local"), "must mention local: {h}");
+        assert!(h.contains("upstream"), "must mention upstream: {h}");
+        assert!(
+            h.contains("naa0yama/boilerplate-rust@main"),
+            "must contain repo@ref: {h}"
+        );
+        assert!(!h.ends_with('\n'), "must not carry trailing newline: {h:?}");
+    }
 
     #[test]
     fn emit_diff_empty_writes_nothing() {

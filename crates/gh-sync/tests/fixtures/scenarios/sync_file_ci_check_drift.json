@@ -1,0 +1,12 @@
+[
+	{
+		"args": [
+			"api",
+			"-H",
+			"Accept: application/vnd.github.raw",
+			"repos/upstream/repo/contents/.github/ci.yml?ref=main"
+		],
+		"exit_code": 0,
+		"stdout": "upstream content\n"
+	}
+]
