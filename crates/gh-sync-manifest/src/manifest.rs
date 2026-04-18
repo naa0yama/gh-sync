@@ -21,7 +21,7 @@ pub struct Manifest {
     pub files: Vec<Rule>,
 }
 
-/// Repository settings block (compatible with gh-infra `Kind: Repository` spec).
+/// Repository settings block.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Spec {
@@ -159,7 +159,7 @@ pub struct Actions {
     /// Allowed action patterns (requires `allowed_actions: selected`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_actions: Option<SelectedActions>,
-    /// Fork PR approval policy.
+    /// Fork PR approval policy: `first_time_contributors_new_to_github`, `first_time_contributors`, or `all_external_contributors`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fork_pr_approval: Option<String>,
 }
@@ -467,6 +467,20 @@ impl Manifest {
 /// 3. Path constraints on `path` and `source`
 /// 4. No duplicate `path` values
 /// 5. Field combination rules per strategy
+/// 6. `spec.visibility` is `public`, `private`, or `internal`
+/// 7. `spec.label_sync` is `additive` or `mirror`
+/// 8. `spec.merge_strategy`: at least one merge method enabled; enum values for commit
+///    title/message fields
+/// 9. `spec.actions.allowed_actions` is `all`, `local_only`, or `selected`
+/// 10. `spec.actions.workflow_permissions` is `read` or `write`
+/// 11. `spec.actions.fork_pr_approval` is one of three permitted policy values
+/// 12. `spec.actions.selected_actions` is required when `allowed_actions` is `selected`
+/// 13. `spec.actions.selected_actions.patterns_allowed` entries have lowercase owners and `@`
+/// 14. `spec.rulesets[].target` is `branch` or `tag`
+/// 15. `spec.rulesets[].enforcement` is `active`, `disabled`, or `evaluate`
+/// 16. `spec.rulesets[].bypass_actors[].role` is a valid built-in role name
+/// 17. `spec.rulesets[].bypass_actors[].bypass_mode` is `always`, `pull_request`, or `exempt`
+/// 18. `spec.rulesets[].rules.pull_request.allowed_merge_methods` elements are `squash`, `merge`, or `rebase`
 ///
 /// # Errors
 /// Returns [`SyncError::Validation`] if one or more constraints are violated.
@@ -580,18 +594,19 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
         }
     }
 
-    // spec.actions.selected_actions.patterns_allowed checks
-    if let Some(spec) = &manifest.spec
-        && let Some(actions) = &spec.actions
-        && let Some(sel) = &actions.selected_actions
-        && let Some(patterns) = &sel.patterns_allowed
-    {
-        validate_action_patterns(patterns, &mut errors);
+    if let Some(spec) = &manifest.spec {
+        validate_spec(spec, &mut errors);
     }
 
-    // spec.merge_strategy: at least one merge method must be enabled
-    if let Some(spec) = &manifest.spec
-        && let Some(ms) = &spec.merge_strategy
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(SyncError::Validation(errors))
+    }
+}
+
+fn validate_spec(spec: &Spec, errors: &mut Vec<ValidationError>) {
+    if let Some(ms) = &spec.merge_strategy
         && ms.allow_merge_commit == Some(false)
         && ms.allow_squash_merge == Some(false)
         && ms.allow_rebase_merge == Some(false)
@@ -602,9 +617,111 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
         ));
     }
 
-    if let Some(spec) = &manifest.spec
-        && let Some(actions) = &spec.actions
-        && let Some(value) = &actions.allowed_actions
+    if let Some(value) = &spec.visibility
+        && !matches!(value.as_str(), "public" | "private" | "internal")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.visibility",
+            format!("must be one of 'public', 'private', 'internal'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &spec.label_sync
+        && !matches!(value.as_str(), "additive" | "mirror")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.label_sync",
+            format!("must be one of 'additive', 'mirror'; got '{value}'"),
+        ));
+    }
+
+    if let Some(ms) = &spec.merge_strategy {
+        validate_merge_strategy(ms, errors);
+    }
+
+    if let Some(actions) = &spec.actions {
+        validate_actions(actions, errors);
+    }
+
+    if let Some(rulesets) = &spec.rulesets {
+        for (ri, rs) in rulesets.iter().enumerate() {
+            validate_ruleset(ri, rs, errors);
+        }
+    }
+}
+
+fn validate_merge_strategy(ms: &MergeStrategy, errors: &mut Vec<ValidationError>) {
+    if let Some(value) = &ms.merge_commit_title
+        && !matches!(value.as_str(), "PR_TITLE" | "MERGE_MESSAGE")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.merge_strategy.merge_commit_title",
+            format!("must be one of 'PR_TITLE', 'MERGE_MESSAGE'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &ms.merge_commit_message
+        && !matches!(value.as_str(), "PR_BODY" | "PR_TITLE" | "BLANK")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.merge_strategy.merge_commit_message",
+            format!("must be one of 'PR_BODY', 'PR_TITLE', 'BLANK'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &ms.squash_merge_commit_title
+        && !matches!(value.as_str(), "PR_TITLE" | "COMMIT_OR_PR_TITLE")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.merge_strategy.squash_merge_commit_title",
+            format!("must be one of 'PR_TITLE', 'COMMIT_OR_PR_TITLE'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &ms.squash_merge_commit_message
+        && !matches!(value.as_str(), "PR_BODY" | "COMMIT_MESSAGES" | "BLANK")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.merge_strategy.squash_merge_commit_message",
+            format!("must be one of 'PR_BODY', 'COMMIT_MESSAGES', 'BLANK'; got '{value}'"),
+        ));
+    }
+}
+
+fn validate_actions(actions: &Actions, errors: &mut Vec<ValidationError>) {
+    if let Some(sel) = &actions.selected_actions
+        && let Some(patterns) = &sel.patterns_allowed
+    {
+        validate_action_patterns(patterns, errors);
+    }
+
+    if let Some(value) = &actions.workflow_permissions
+        && !matches!(value.as_str(), "read" | "write")
+    {
+        errors.push(ValidationError::top_level(
+            "spec.actions.workflow_permissions",
+            format!("must be one of 'read', 'write'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &actions.fork_pr_approval
+        && !matches!(
+            value.as_str(),
+            "first_time_contributors_new_to_github"
+                | "first_time_contributors"
+                | "all_external_contributors"
+        )
+    {
+        errors.push(ValidationError::top_level(
+            "spec.actions.fork_pr_approval",
+            format!(
+                "must be one of 'first_time_contributors_new_to_github', \
+                 'first_time_contributors', 'all_external_contributors'; got '{value}'"
+            ),
+        ));
+    }
+
+    if let Some(value) = &actions.allowed_actions
         && !matches!(value.as_str(), "all" | "local_only" | "selected")
     {
         errors.push(ValidationError::top_level(
@@ -613,10 +730,7 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
         ));
     }
 
-    // spec.actions.selected_actions: required when allowed_actions is "selected"
-    if let Some(spec) = &manifest.spec
-        && let Some(actions) = &spec.actions
-        && actions.allowed_actions.as_deref() == Some("selected")
+    if actions.allowed_actions.as_deref() == Some("selected")
         && (actions.selected_actions.is_none()
             || actions.selected_actions.as_ref().is_some_and(|sa| {
                 sa.github_owned_allowed.is_none() && sa.patterns_allowed.is_none()
@@ -627,11 +741,73 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
             "required when allowed_actions is 'selected': set github_owned_allowed or patterns_allowed",
         ));
     }
+}
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(SyncError::Validation(errors))
+fn validate_ruleset(ri: usize, rs: &Ruleset, errors: &mut Vec<ValidationError>) {
+    if let Some(value) = &rs.target
+        && !matches!(value.as_str(), "branch" | "tag")
+    {
+        errors.push(ValidationError::top_level(
+            format!("spec.rulesets[{ri}].target"),
+            format!("must be one of 'branch', 'tag'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &rs.enforcement
+        && !matches!(value.as_str(), "active" | "disabled" | "evaluate")
+    {
+        errors.push(ValidationError::top_level(
+            format!("spec.rulesets[{ri}].enforcement"),
+            format!("must be one of 'active', 'disabled', 'evaluate'; got '{value}'"),
+        ));
+    }
+
+    if let Some(actors) = &rs.bypass_actors {
+        for (ai, actor) in actors.iter().enumerate() {
+            validate_bypass_actor(ri, ai, actor, errors);
+        }
+    }
+
+    if let Some(rules) = &rs.rules
+        && let Some(pr) = &rules.pull_request
+        && let Some(methods) = &pr.allowed_merge_methods
+    {
+        for (mi, method) in methods.iter().enumerate() {
+            if !matches!(method.as_str(), "squash" | "merge" | "rebase") {
+                errors.push(ValidationError::top_level(
+                    format!("spec.rulesets[{ri}].rules.pull_request.allowed_merge_methods[{mi}]"),
+                    format!("must be one of 'squash', 'merge', 'rebase'; got '{method}'"),
+                ));
+            }
+        }
+    }
+}
+
+fn validate_bypass_actor(
+    ri: usize,
+    ai: usize,
+    actor: &BypassActor,
+    errors: &mut Vec<ValidationError>,
+) {
+    if let Some(value) = &actor.role
+        && !matches!(
+            value.as_str(),
+            "admin" | "maintain" | "write" | "triage" | "read"
+        )
+    {
+        errors.push(ValidationError::top_level(
+            format!("spec.rulesets[{ri}].bypass_actors[{ai}].role"),
+            format!("must be one of 'admin', 'maintain', 'write', 'triage', 'read'; got '{value}'"),
+        ));
+    }
+
+    if let Some(value) = &actor.bypass_mode
+        && !matches!(value.as_str(), "always" | "pull_request" | "exempt")
+    {
+        errors.push(ValidationError::top_level(
+            format!("spec.rulesets[{ri}].bypass_actors[{ai}].bypass_mode"),
+            format!("must be one of 'always', 'pull_request', 'exempt'; got '{value}'"),
+        ));
     }
 }
 
@@ -1609,6 +1785,506 @@ spec:
     allowed_actions: selected
     selected_actions:
       github_owned_allowed: true
+",
+        );
+    }
+
+    // --- validate_schema: visibility ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_visibility_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  visibility: bad_value
+",
+            "spec.visibility",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_visibility_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  visibility: public
+",
+        );
+    }
+
+    // --- validate_schema: label_sync ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_label_sync_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  label_sync: bad_value
+",
+            "spec.label_sync",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_label_sync_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  label_sync: mirror
+",
+        );
+    }
+
+    // --- validate_schema: merge_commit_title ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_commit_title_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    merge_commit_title: bad_value
+",
+            "spec.merge_strategy.merge_commit_title",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_commit_title_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    merge_commit_title: PR_TITLE
+",
+        );
+    }
+
+    // --- validate_schema: merge_commit_message ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_commit_message_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    merge_commit_message: COMMIT_MESSAGES
+",
+            "spec.merge_strategy.merge_commit_message",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_merge_commit_message_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    merge_commit_message: PR_BODY
+",
+        );
+    }
+
+    // --- validate_schema: squash_merge_commit_title ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_squash_merge_commit_title_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    squash_merge_commit_title: bad_value
+",
+            "spec.merge_strategy.squash_merge_commit_title",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_squash_merge_commit_title_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    squash_merge_commit_title: COMMIT_OR_PR_TITLE
+",
+        );
+    }
+
+    // --- validate_schema: squash_merge_commit_message ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_squash_merge_commit_message_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    squash_merge_commit_message: bad_value
+",
+            "spec.merge_strategy.squash_merge_commit_message",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_squash_merge_commit_message_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  merge_strategy:
+    squash_merge_commit_message: COMMIT_MESSAGES
+",
+        );
+    }
+
+    // --- validate_schema: workflow_permissions ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_workflow_permissions_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    workflow_permissions: bad_value
+",
+            "spec.actions.workflow_permissions",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_workflow_permissions_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    workflow_permissions: read
+",
+        );
+    }
+
+    // --- validate_schema: fork_pr_approval ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_fork_pr_approval_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    fork_pr_approval: bad_value
+",
+            "spec.actions.fork_pr_approval",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_fork_pr_approval_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  actions:
+    fork_pr_approval: first_time_contributors
+",
+        );
+    }
+
+    // --- validate_schema: rulesets[].target ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_ruleset_target_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      target: bad_value
+",
+            "spec.rulesets[0].target",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_ruleset_target_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      target: branch
+",
+        );
+    }
+
+    // --- validate_schema: rulesets[].enforcement ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_ruleset_enforcement_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      enforcement: bad_value
+",
+            "spec.rulesets[0].enforcement",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_ruleset_enforcement_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      enforcement: active
+",
+        );
+    }
+
+    // --- validate_schema: rulesets[].bypass_actors[].role ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_bypass_actor_role_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      bypass_actors:
+        - role: bad_value
+",
+            "spec.rulesets[0].bypass_actors[0].role",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_bypass_actor_role_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      bypass_actors:
+        - role: admin
+",
+        );
+    }
+
+    // --- validate_schema: rulesets[].bypass_actors[].bypass_mode ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_bypass_actor_bypass_mode_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      bypass_actors:
+        - role: admin
+          bypass_mode: bad_value
+",
+            "spec.rulesets[0].bypass_actors[0].bypass_mode",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_bypass_actor_bypass_mode_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      bypass_actors:
+        - role: admin
+          bypass_mode: always
+",
+        );
+    }
+
+    // --- validate_schema: rulesets[].rules.pull_request.allowed_merge_methods ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_merge_methods_invalid_value_is_error() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      rules:
+        pull_request:
+          allowed_merge_methods:
+            - bad_value
+",
+            "spec.rulesets[0].rules.pull_request.allowed_merge_methods[0]",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_allowed_merge_methods_valid_value_is_ok() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+spec:
+  rulesets:
+    - name: test
+      rules:
+        pull_request:
+          allowed_merge_methods:
+            - squash
+            - merge
 ",
         );
     }
