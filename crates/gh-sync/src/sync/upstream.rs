@@ -4,10 +4,6 @@
 #[allow(clippy::module_name_repetitions)]
 pub use gh_sync_engine::upstream::{FetchResult, TreeEntry, UpstreamFetcher};
 
-// Re-export mock support for tests in this crate.
-#[cfg(test)]
-pub use gh_sync_engine::upstream::testing;
-
 // ---------------------------------------------------------------------------
 // TreeResponse (internal — only used by GhFetcher below)
 // ---------------------------------------------------------------------------

@@ -76,13 +76,7 @@ pub fn render(version: &str, sha: &str, upstream_manifest: Option<&str>) -> Stri
 ///
 /// Returns an error when the directory cannot be created or the file cannot be written.
 pub fn write_workflow_from_content(path: &Path, content: &str) -> anyhow::Result<()> {
-    use anyhow::Context as _;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory '{}'", parent.display()))?;
-    }
-    std::fs::write(path, content)
-        .with_context(|| format!("failed to write workflow file '{}'", path.display()))
+    super::write_file(path, content)
 }
 
 // ---------------------------------------------------------------------------

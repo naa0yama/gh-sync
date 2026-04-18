@@ -1,13 +1,27 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 
 /// Arguments for the `init` subcommand.
 #[derive(Parser, Debug)]
-// Mode flags map directly to clap boolean arguments; mutual exclusion is enforced by conflicts_with.
+#[command(group(
+    ArgGroup::new("mode")
+        .required(true)
+        .args(["upstream", "downstream"])
+))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
-    /// Upstream repository in `owner/name` format
+    /// Generate config.yaml + schema.json for this template (upstream) project
+    #[arg(long)]
+    pub upstream: bool,
+
+    /// Generate workflow + optional Claude skill for this downstream project
+    #[arg(long)]
+    pub downstream: bool,
+
+    /// Repository in `owner/name` format.
+    /// For --upstream: this project's own repo (stored in config upstream.repo).
+    /// For --downstream: the upstream template repo to sync from.
     #[arg(short = 'r', long = "repo")]
     pub repo: Option<String>,
 
@@ -15,30 +29,19 @@ pub struct InitArgs {
     #[arg(long = "ref", default_value = "main")]
     pub ref_: String,
 
-    /// Output path for the generated configuration file
-    #[arg(
-        short = 'o',
-        long = "output",
-        default_value = ".github/gh-sync/config.yaml"
-    )]
-    pub output: PathBuf,
+    /// Output path for the generated config file (--upstream only)
+    #[arg(short = 'o', long = "output", conflicts_with = "downstream")]
+    pub output: Option<PathBuf>,
 
-    /// Copy the upstream's own gh-sync config (non-interactive)
-    #[arg(long = "from-upstream", conflicts_with = "select")]
-    pub from_upstream: bool,
-
-    /// Interactively select files from the upstream repository
-    #[arg(long = "select", conflicts_with = "from_upstream")]
+    /// Interactively select files from the repository (--upstream only)
+    #[arg(long = "select", conflicts_with = "downstream")]
     pub select: bool,
 
-    /// Overwrite an existing config file without prompting
+    /// Also generate a Claude Code skill file for marker usage (--downstream only)
+    #[arg(long = "with-skill", conflicts_with = "upstream")]
+    pub with_skill: bool,
+
+    /// Overwrite existing files without prompting
     #[arg(long = "force")]
     pub force: bool,
-
-    /// Generate only the GitHub Actions workflow file (skip config and schema)
-    #[arg(
-        long = "with-workflow",
-        conflicts_with_all = ["from_upstream", "select", "output"]
-    )]
-    pub with_workflow: bool,
 }
