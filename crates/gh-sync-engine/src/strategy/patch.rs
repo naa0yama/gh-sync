@@ -58,17 +58,22 @@ pub fn apply(
     runner: &dyn PatchRunner,
     preserve_markers: bool,
 ) -> StrategyResult {
-    let patched = match runner.apply_patch(upstream, patch_file) {
-        Ok(PatchOutput::Patched(p)) => p,
-        Ok(PatchOutput::Conflict(message)) => return StrategyResult::Conflict { message },
-        Err(e) => return StrategyResult::Error(e.to_string()),
-    };
-
     if preserve_markers {
+        let upstream_stripped = match strip_marker_blocks(upstream) {
+            Ok((s, _)) => s,
+            Err(e) => {
+                return StrategyResult::Error(format!("invalid marker block (upstream): {e}"));
+            }
+        };
+        let patched = match runner.apply_patch(&upstream_stripped, patch_file) {
+            Ok(PatchOutput::Patched(p)) => p,
+            Ok(PatchOutput::Conflict(message)) => return StrategyResult::Conflict { message },
+            Err(e) => return StrategyResult::Error(e.to_string()),
+        };
         let (local_stripped, marker_blocks) = match local.map(strip_marker_blocks).transpose() {
             Ok(Some((s, b))) => (Some(s), b),
             Ok(None) => (None, vec![]),
-            Err(e) => return StrategyResult::Error(format!("marker parse error: {e}")),
+            Err(e) => return StrategyResult::Error(format!("invalid marker block (local): {e}")),
         };
         if local_stripped.as_deref() == Some(patched.as_slice()) {
             StrategyResult::Unchanged
@@ -77,10 +82,17 @@ pub fn apply(
                 content: merge_marker_blocks(&patched, &marker_blocks),
             }
         }
-    } else if local == Some(patched.as_slice()) {
-        StrategyResult::Unchanged
     } else {
-        StrategyResult::Changed { content: patched }
+        let patched = match runner.apply_patch(upstream, patch_file) {
+            Ok(PatchOutput::Patched(p)) => p,
+            Ok(PatchOutput::Conflict(message)) => return StrategyResult::Conflict { message },
+            Err(e) => return StrategyResult::Error(e.to_string()),
+        };
+        if local == Some(patched.as_slice()) {
+            StrategyResult::Unchanged
+        } else {
+            StrategyResult::Changed { content: patched }
+        }
     }
 }
 

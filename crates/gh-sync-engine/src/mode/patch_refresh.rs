@@ -53,6 +53,16 @@ fn write_patch(repo_root: &Path, patch_path: &str, content: &str) -> anyhow::Res
     Ok(WriteOutcome::Written)
 }
 
+/// Strip marker blocks from `bytes`, discarding the extracted blocks.
+///
+/// `side` (`"upstream"` or `"local"`) is included in the error message so the
+/// caller can tell which input failed validation.
+fn strip_markers(bytes: &[u8], side: &str) -> Result<Vec<u8>, String> {
+    strip_marker_blocks(bytes)
+        .map(|(s, _)| s)
+        .map_err(|e| format!("invalid marker block ({side}): {e}"))
+}
+
 /// Process one patch rule. Returns `true` when an error was encountered.
 ///
 /// # Errors
@@ -92,26 +102,29 @@ fn process_rule(
     };
 
     // old=upstream, new=local: patch applies upstream → local.
-    // When preserve_markers is true, strip marker blocks before diffing.
-    let effective_local = if rule.preserve_markers == Some(true) {
-        match strip_marker_blocks(&local_bytes) {
-            Ok((stripped, _)) => stripped,
-            Err(e) => {
-                emit_status(
-                    w,
-                    StatusTag::Fail,
-                    &rule.path,
-                    rule.strategy,
-                    Some(&format!("invalid marker block: {e}")),
-                )?;
+    // When preserve_markers is true, strip marker blocks from both sides before
+    // diffing so that marker-protected regions on either side are excluded.
+    let (effective_upstream, effective_local) = if rule.preserve_markers == Some(true) {
+        let up = match strip_markers(&upstream, "upstream") {
+            Ok(s) => s,
+            Err(msg) => {
+                emit_status(w, StatusTag::Fail, &rule.path, rule.strategy, Some(&msg))?;
                 return Ok(true);
             }
-        }
+        };
+        let lo = match strip_markers(&local_bytes, "local") {
+            Ok(s) => s,
+            Err(msg) => {
+                emit_status(w, StatusTag::Fail, &rule.path, rule.strategy, Some(&msg))?;
+                return Ok(true);
+            }
+        };
+        (up, lo)
     } else {
-        local_bytes
+        (upstream, local_bytes)
     };
 
-    let diff = match unified_diff(&rule.path, &upstream, &effective_local) {
+    let diff = match unified_diff(&rule.path, &effective_upstream, &effective_local) {
         Ok(d) => d,
         Err(e) => {
             emit_status(

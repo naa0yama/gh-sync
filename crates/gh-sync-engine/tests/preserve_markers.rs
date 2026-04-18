@@ -143,6 +143,103 @@ fn marker_external_drift_included_in_patch() {
 }
 
 // ---------------------------------------------------------------------------
+// Case 7 — upstream also has markers: both sides stripped, diff is marker-free
+// ---------------------------------------------------------------------------
+
+/// When both upstream and local have marker blocks (template pattern), both
+/// sides are stripped before diffing. Content inside markers on either side
+/// does not appear in the generated patch.
+#[cfg_attr(miri, ignore)]
+#[test]
+fn upstream_and_local_both_have_markers_patch_excludes_marker_regions() {
+    // Arrange — upstream template has a marker placeholder, local fills it in differently
+    let dir = tempfile::tempdir().unwrap();
+    let upstream_bytes =
+        b"# gh-sync:keep-start\nmembers = [\"crates/brust\"]\n# gh-sync:keep-end\nanyhow = \"1.0\"\n";
+    let local_bytes =
+        b"# gh-sync:keep-start\nmembers = [\"crates/gh-sync\"]\n# gh-sync:keep-end\nanyhow = \"1.0\"\n";
+    std::fs::write(dir.path().join("Cargo.toml"), local_bytes).unwrap();
+    let manifest = make_manifest("Cargo.toml", Some(true));
+    let fetcher = MockFetcher::content(upstream_bytes.to_vec());
+    let mut buf: Vec<u8> = Vec::new();
+
+    // Act
+    let code = patch_refresh::run(&manifest, dir.path(), &fetcher, &mut buf).unwrap();
+
+    // Assert — patch must be empty: the only difference is inside marker blocks
+    let out = String::from_utf8(buf).unwrap();
+    assert!(matches!(code, ExitCode::SUCCESS), "expected SUCCESS: {out}");
+    let patch_path = dir.path().join(".github/gh-sync/patches/Cargo.toml.patch");
+    assert!(patch_path.exists(), "patch file should be created");
+    assert_eq!(
+        std::fs::read(&patch_path).unwrap(),
+        b"",
+        "patch must be empty: marker regions excluded from both sides"
+    );
+}
+
+/// Upstream has markers, local has markers, but anyhow differs outside markers.
+/// The patch must capture only the non-marker drift.
+#[cfg_attr(miri, ignore)]
+#[test]
+fn upstream_and_local_markers_with_external_drift_patch_non_empty() {
+    // Arrange
+    let dir = tempfile::tempdir().unwrap();
+    let upstream_bytes =
+        b"# gh-sync:keep-start\nmembers = [\"crates/brust\"]\n# gh-sync:keep-end\nanyhow = \"1.0\"\n";
+    let local_bytes =
+        b"# gh-sync:keep-start\nmembers = [\"crates/gh-sync\"]\n# gh-sync:keep-end\nanyhow = \"2.0\"\n";
+    std::fs::write(dir.path().join("Cargo.toml"), local_bytes).unwrap();
+    let manifest = make_manifest("Cargo.toml", Some(true));
+    let fetcher = MockFetcher::content(upstream_bytes.to_vec());
+    let mut buf: Vec<u8> = Vec::new();
+
+    // Act
+    let code = patch_refresh::run(&manifest, dir.path(), &fetcher, &mut buf).unwrap();
+
+    // Assert — patch must be non-empty (anyhow drift outside markers)
+    let out = String::from_utf8(buf).unwrap();
+    assert!(matches!(code, ExitCode::SUCCESS), "expected SUCCESS: {out}");
+    let patch_bytes =
+        std::fs::read(dir.path().join(".github/gh-sync/patches/Cargo.toml.patch")).unwrap();
+    assert!(
+        !patch_bytes.is_empty(),
+        "patch must capture anyhow drift outside markers: {out}"
+    );
+    let patch_str = String::from_utf8(patch_bytes).unwrap();
+    assert!(
+        patch_str.contains("anyhow"),
+        "patch should reference anyhow"
+    );
+    assert!(
+        !patch_str.contains("members"),
+        "patch must not reference marker-protected members"
+    );
+}
+
+/// Upstream has an orphan marker (unclosed keep-start). The run must fail.
+#[cfg_attr(miri, ignore)]
+#[test]
+fn upstream_orphan_marker_fails() {
+    // Arrange
+    let dir = tempfile::tempdir().unwrap();
+    let upstream_bytes = b"# gh-sync:keep-start\nmembers = [\"crates/brust\"]\n";
+    let local_bytes = b"anyhow = \"1.0\"\n";
+    std::fs::write(dir.path().join("Cargo.toml"), local_bytes).unwrap();
+    let manifest = make_manifest("Cargo.toml", Some(true));
+    let fetcher = MockFetcher::content(upstream_bytes.to_vec());
+    let mut buf: Vec<u8> = Vec::new();
+
+    // Act
+    let code = patch_refresh::run(&manifest, dir.path(), &fetcher, &mut buf).unwrap();
+
+    // Assert
+    let out = String::from_utf8(buf).unwrap();
+    assert!(matches!(code, ExitCode::FAILURE), "expected FAILURE: {out}");
+    assert!(out.contains("[FAIL"), "expected [FAIL in output: {out}");
+}
+
+// ---------------------------------------------------------------------------
 // Case 4 — orphan keep-start produces FAILURE with [FAIL in output
 // ---------------------------------------------------------------------------
 
