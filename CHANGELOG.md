@@ -1,6 +1,25 @@
 # Changelog
 
 ## [v0.2.1](https://github.com/naa0yama/gh-sync/compare/v0.2.0...v0.2.1) - 2026-04-18
+### Features 🎉
+- feat(engine): add diff context header annotation to sync/ci-check diff output by @naa0yama in https://github.com/naa0yama/gh-sync/pull/30
+### Bug Fixes 🐌
+- fix: enforce enum validation as schema trust boundary by @naa0yama in https://github.com/naa0yama/gh-sync/pull/36
+### Dependency Updates 📦
+- Update Rust crate console to 0.16 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/8
+### Development Environment 🔧
+- Update taiki-e/install-action action to v2.75.3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/23
+- Update taiki-e/install-action action to v2.75.4 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/26
+- Update dependency aqua:EmbarkStudios/cargo-deny to v0.19.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/28
+- ci: restructure PR label pipeline and release categories by @naa0yama in https://github.com/naa0yama/gh-sync/pull/27
+- Update actions/github-script action to v9 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/25
+- Update dependency dprint to v0.54.0 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/15
+- Update All action update by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/29
+- ci: update tagpr action to v1.18.3 by @naa0yama in https://github.com/naa0yama/gh-sync/pull/33
+### Other Changes
+- Release for v0.2.1 by @github-actions[bot] in https://github.com/naa0yama/gh-sync/pull/32
+
+## [v0.2.1](https://github.com/naa0yama/gh-sync/compare/v0.2.0...v0.2.1) - 2026-04-18
 
 ### Features 🎉
 
