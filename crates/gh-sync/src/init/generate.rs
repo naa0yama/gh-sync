@@ -161,6 +161,7 @@ pub fn run_interactive(
             strategy: f.strategy,
             source: None,
             patch: None,
+            preserve_markers: None,
         })
         .collect();
 
@@ -187,6 +188,7 @@ mod tests {
             strategy: Strategy::Replace,
             source: None,
             patch: None,
+            preserve_markers: None,
         }];
         let m = build_manifest("owner/repo", "main", files);
         assert_eq!(m.upstream.repo, "owner/repo");
@@ -202,6 +204,7 @@ mod tests {
             strategy: Strategy::Replace,
             source: None,
             patch: None,
+            preserve_markers: None,
         }];
         let m = build_manifest("owner/repo", "main", files);
         let yaml = manifest_to_yaml(&m).unwrap();
@@ -222,12 +225,14 @@ mod tests {
                 strategy: Strategy::Replace,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
             Rule {
                 path: String::from(".github/workflows/ci.yaml"),
                 strategy: Strategy::Replace,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
         ];
         let m = build_manifest("owner/repo", "main", rules);
@@ -248,12 +253,14 @@ mod tests {
                 strategy: Strategy::Replace,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
             Rule {
                 path: String::from("docs/spec.md"),
                 strategy: Strategy::CreateOnly,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
         ];
         let m = build_manifest("owner/repo", "main", rules);
@@ -272,6 +279,7 @@ mod tests {
             strategy: Strategy::CreateOnly,
             source: None,
             patch: None,
+            preserve_markers: None,
         }];
         let m = build_manifest("owner/repo", "main", rules);
         let yaml = manifest_to_yaml(&m).unwrap();
@@ -289,12 +297,14 @@ mod tests {
                 strategy: Strategy::CreateOnly,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
             Rule {
                 path: String::from(".github/workflows/ci.yaml"),
                 strategy: Strategy::Replace,
                 source: None,
                 patch: None,
+                preserve_markers: None,
             },
         ];
         let m = build_manifest("owner/repo", "main", rules);

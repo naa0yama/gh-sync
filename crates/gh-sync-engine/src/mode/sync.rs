@@ -104,6 +104,7 @@ pub fn run(
                         local_bytes.as_deref(),
                         &full_patch,
                         patch_runner,
+                        rule.preserve_markers.unwrap_or(false),
                     ),
                 }
             }
@@ -248,6 +249,7 @@ mod tests {
             strategy: Strategy::Replace,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -257,6 +259,7 @@ mod tests {
             strategy: Strategy::Delete,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -266,6 +269,7 @@ mod tests {
             strategy: Strategy::CreateOnly,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -490,6 +494,7 @@ mod tests {
             strategy: Strategy::Patch,
             source: None,
             patch: Some(String::from("test.patch")),
+            preserve_markers: None,
         }]);
         // Create the patch file so runner sees a valid path
         std::fs::write(dir.path().join("test.patch"), b"").unwrap();

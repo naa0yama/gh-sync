@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use super::StrategyResult;
+use super::markers::{merge_marker_blocks, strip_marker_blocks};
 
 // ---------------------------------------------------------------------------
 // PatchOutput
@@ -44,22 +45,42 @@ pub trait PatchRunner {
 ///
 /// Applies `patch_file` to `upstream` content, then compares the result with
 /// `local` to determine whether a write is needed.
+///
+/// When `preserve_markers` is `true`, marker blocks enclosed by
+/// `gh-sync:keep-start` / `gh-sync:keep-end` comments are stripped from
+/// `local` before comparison so they are excluded from drift detection.
+/// If the patched result differs from the stripped local, the marker blocks
+/// are merged back into the patched content before it is returned.
 pub fn apply(
     upstream: &[u8],
     local: Option<&[u8]>,
     patch_file: &Path,
     runner: &dyn PatchRunner,
+    preserve_markers: bool,
 ) -> StrategyResult {
-    match runner.apply_patch(upstream, patch_file) {
-        Ok(PatchOutput::Patched(content)) => {
-            if local == Some(content.as_slice()) {
-                StrategyResult::Unchanged
-            } else {
-                StrategyResult::Changed { content }
+    let patched = match runner.apply_patch(upstream, patch_file) {
+        Ok(PatchOutput::Patched(p)) => p,
+        Ok(PatchOutput::Conflict(message)) => return StrategyResult::Conflict { message },
+        Err(e) => return StrategyResult::Error(e.to_string()),
+    };
+
+    if preserve_markers {
+        let (local_stripped, marker_blocks) = match local.map(strip_marker_blocks).transpose() {
+            Ok(Some((s, b))) => (Some(s), b),
+            Ok(None) => (None, vec![]),
+            Err(e) => return StrategyResult::Error(format!("marker parse error: {e}")),
+        };
+        if local_stripped.as_deref() == Some(patched.as_slice()) {
+            StrategyResult::Unchanged
+        } else {
+            StrategyResult::Changed {
+                content: merge_marker_blocks(&patched, &marker_blocks),
             }
         }
-        Ok(PatchOutput::Conflict(message)) => StrategyResult::Conflict { message },
-        Err(e) => StrategyResult::Error(e.to_string()),
+    } else if local == Some(patched.as_slice()) {
+        StrategyResult::Unchanged
+    } else {
+        StrategyResult::Changed { content: patched }
     }
 }
 
@@ -138,7 +159,13 @@ mod tests {
         let runner = MockPatchRunner::success(b"patched\n".to_vec());
 
         // Act
-        let result = apply(b"upstream\n", Some(b"old\n"), Path::new("x.patch"), &runner);
+        let result = apply(
+            b"upstream\n",
+            Some(b"old\n"),
+            Path::new("x.patch"),
+            &runner,
+            false,
+        );
 
         // Assert
         assert!(
@@ -158,6 +185,7 @@ mod tests {
             Some(b"patched\n"),
             Path::new("x.patch"),
             &runner,
+            false,
         );
 
         // Assert
@@ -173,7 +201,7 @@ mod tests {
         let runner = MockPatchRunner::success(b"patched\n".to_vec());
 
         // Act
-        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner);
+        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner, false);
 
         // Assert
         assert!(
@@ -188,7 +216,7 @@ mod tests {
         let runner = MockPatchRunner::conflict("hunk 1 failed to apply");
 
         // Act
-        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner);
+        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner, false);
 
         // Assert
         assert!(
@@ -204,7 +232,7 @@ mod tests {
         let runner = MockPatchRunner::error("patch binary not found");
 
         // Act
-        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner);
+        let result = apply(b"upstream\n", None, Path::new("x.patch"), &runner, false);
 
         // Assert
         assert!(

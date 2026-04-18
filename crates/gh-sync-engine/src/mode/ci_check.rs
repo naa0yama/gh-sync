@@ -161,7 +161,13 @@ fn evaluate_drift(
                 // Apply patch to get expected content
                 let patch_path = manifest::resolve_patch_path(rule);
                 let full_patch = repo_root.join(&patch_path);
-                match strategy::patch::apply(&upstream, local_bytes, &full_patch, patch_runner) {
+                match strategy::patch::apply(
+                    &upstream,
+                    local_bytes,
+                    &full_patch,
+                    patch_runner,
+                    rule.preserve_markers.unwrap_or(false),
+                ) {
                     StrategyResult::Changed { content } => content,
                     StrategyResult::Conflict { message } => {
                         return (false, format!("conflict: {message}"), String::new(), true);
@@ -257,6 +263,7 @@ mod tests {
             strategy: Strategy::Replace,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -266,6 +273,7 @@ mod tests {
             strategy: Strategy::Delete,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 
@@ -275,6 +283,7 @@ mod tests {
             strategy: Strategy::CreateOnly,
             source: None,
             patch: None,
+            preserve_markers: None,
         }
     }
 

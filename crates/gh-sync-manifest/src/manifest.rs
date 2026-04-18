@@ -396,6 +396,11 @@ pub struct Rule {
     /// Explicit patch file path (`patch` strategy only; defaults to convention).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
+    /// When `true`, lines enclosed by `gh-sync:keep-start` / `gh-sync:keep-end`
+    /// marker comments are excluded from drift detection and patch generation.
+    /// Only valid with `strategy: patch`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preserve_markers: Option<bool>,
 }
 
 /// Synchronisation strategy for a rule.
@@ -591,6 +596,13 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
                     ));
                 }
             }
+        }
+        if rule.strategy != Strategy::Patch && rule.preserve_markers.is_some() {
+            errors.push(ValidationError::rule(
+                i,
+                "preserve_markers",
+                "field only allowed for strategy 'patch'",
+            ));
         }
     }
 
@@ -1472,6 +1484,7 @@ files:
             strategy: Strategy::Patch,
             source: None,
             patch: None,
+            preserve_markers: None,
         };
         assert_eq!(
             resolve_patch_path(&rule),
@@ -1486,6 +1499,7 @@ files:
             strategy: Strategy::Patch,
             source: None,
             patch: None,
+            preserve_markers: None,
         };
         assert_eq!(
             resolve_patch_path(&rule),
@@ -1500,6 +1514,7 @@ files:
             strategy: Strategy::Patch,
             source: None,
             patch: Some(String::from("custom/cargo.patch")),
+            preserve_markers: None,
         };
         assert_eq!(resolve_patch_path(&rule), "custom/cargo.patch");
     }
