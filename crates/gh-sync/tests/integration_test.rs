@@ -80,8 +80,49 @@ fn test_cli_init_help() {
     cmd.args(["init", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("repo"))
-        .stdout(predicate::str::contains("output"));
+        .stdout(predicate::str::contains("upstream"))
+        .stdout(predicate::str::contains("downstream"))
+        .stdout(predicate::str::contains("with-skill"));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_cli_init_requires_mode_flag() {
+    // init without --upstream or --downstream must fail
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["init", "--repo", "owner/name"])
+        .assert()
+        .failure();
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_cli_init_upstream_and_downstream_conflict() {
+    // --upstream and --downstream are mutually exclusive
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["init", "--upstream", "--downstream"])
+        .assert()
+        .failure();
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_cli_init_downstream_select_conflict() {
+    // --select is upstream-only; combining with --downstream must fail
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["init", "--downstream", "--select"])
+        .assert()
+        .failure();
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_cli_init_upstream_with_skill_conflict() {
+    // --with-skill is downstream-only; combining with --upstream must fail
+    let mut cmd = cargo_bin_cmd!("gh-sync");
+    cmd.args(["init", "--upstream", "--with-skill"])
+        .assert()
+        .failure();
 }
 
 #[test]
@@ -145,27 +186,6 @@ fn test_cli_ci_check_and_patch_refresh_conflict() {
     cmd.args(["sync", "file", "--ci-check", "--patch-refresh"])
         .assert()
         .failure();
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn test_cli_from_upstream_and_select_conflict() {
-    // init --from-upstream and --select are mutually exclusive
-    let mut cmd = cargo_bin_cmd!("gh-sync");
-    cmd.args(["init", "--from-upstream", "--select"])
-        .assert()
-        .failure();
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn test_cli_init_with_workflow_in_help() {
-    // --with-workflow flag must appear in init --help
-    let mut cmd = cargo_bin_cmd!("gh-sync");
-    cmd.args(["init", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("with-workflow"));
 }
 
 #[test]

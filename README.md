@@ -71,7 +71,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`gh-sync init --with-workflow` を実行すると、このワークフロー雛形を `.github/workflows/gh-sync.yaml` として自動生成できます。
+`gh-sync init --downstream --repo naa0yama/boilerplate-rust --with-skill` を実行すると、このワークフロー雛形を `.github/workflows/gh-sync.yaml` として自動生成できます。
 
 マニフェストを upstream リポジトリから取得して使う場合は `upstream-manifest` を指定します。
 ローカルの `manifest` ファイルが存在すれば、同じ `path` のルールで local が上書き (local overlay) されます。

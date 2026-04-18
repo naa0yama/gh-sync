@@ -725,20 +725,24 @@ commit / PR 操作はこのコマンドでは行わない — skill 経由で Cl
 
 ### 5.4 `gh-sync init` フラグ
 
-| フラグ            | 短縮 | 型   | デフォルト                    | 説明                                                       |
-| ----------------- | ---- | ---- | ----------------------------- | ---------------------------------------------------------- |
-| `--repo`          | `-r` | str  | —(TTY の場合はプロンプト)     | upstream リポジトリ(`owner/name` 形式)                     |
-| `--ref`           |      | str  | `main`                        | 取得元の git ref                                           |
-| `--output`        | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス                                                 |
-| `--from-upstream` |      | bool | false                         | upstream 自身の config をコピー(非対話モード可)            |
-| `--select`        |      | bool | false                         | upstream のファイル一覧から対話的に選択                    |
-| `--with-workflow` |      | bool | false                         | `.github/workflows/gh-sync.yaml` を同時生成 (詳細は §11.3) |
-| `--force`         |      | bool | false                         | 既存ファイルを確認なしで上書き                             |
+| フラグ         | 短縮 | 型   | デフォルト                    | 説明                                                                           |
+| -------------- | ---- | ---- | ----------------------------- | ------------------------------------------------------------------------------ |
+| `--repo`       | `-r` | str  | —(TTY の場合はプロンプト)     | 対象リポジトリ(`owner/name` 形式)                                              |
+| `--ref`        |      | str  | `main`                        | 取得元の git ref                                                               |
+| `--upstream`   |      | bool | false                         | upstream モード: `config.yaml` と `schema.json` を生成 (`--downstream` と排他) |
+| `--downstream` |      | bool | false                         | downstream モード: `gh-sync.yaml` ワークフローを生成 (`--upstream` と排他)     |
+| `--select`     |      | bool | false                         | upstream のファイル一覧から対話的に選択 (`--upstream` 専用)                    |
+| `--with-skill` |      | bool | false                         | `.claude/skills/gh-sync/SKILL.md` を生成 (`--downstream` 専用)                 |
+| `--output`     | `-o` | Path | `.github/gh-sync/config.yaml` | 出力先パス (`--upstream` 専用)                                                 |
+| `--force`      |      | bool | false                         | 既存ファイルを確認なしで上書き                                                 |
 
-`--from-upstream` と `--select` は相互排他。どちらも指定しない場合、TTY であればモード選択プロンプトを表示する。
+`--upstream` と `--downstream` はどちらか一方が必須(相互排他)。
+
+- `--upstream` モード: `config.yaml` と `schema.json` を生成する。ワークフローや skill ファイルは生成しない。
+- `--downstream` モード: `.github/workflows/gh-sync.yaml` を生成する。`config.yaml` は生成しない。`--with-skill` を指定すると、さらに `.claude/skills/gh-sync/SKILL.md` を生成し、marker 記法の使い方を Claude Code に伝えるスキルファイルを追加する。
 
 config ファイルと同ディレクトリに `schema.json` (JSON Schema) を生成し、
-yaml-language-server 対応エディタで補完・バリデーションが有効になる。
+yaml-language-server 対応エディタで補完・バリデーションが有効になる(`--upstream` モードのみ)。
 
 config が不在の状態で `gh-sync sync` を実行した場合、エラーメッセージに
 `gh-sync init` 実行のヒントを表示する。
@@ -979,19 +983,24 @@ Run `gh-sync sync` locally to apply upstream changes.
 | `manifest`          |    no    | `.github/gh-sync/config.yaml` | 同期設定ファイルのパス                                                     |
 | `upstream-manifest` |    no    | —                             | upstream マニフェスト参照 (`owner/repo@ref:path` 形式)。詳細は第 12 章参照 |
 
-### 11.3 gh-sync init --with-workflow
+### 11.3 gh-sync init --downstream
 
-`gh-sync init` に `--with-workflow` フラグを追加。config.yaml・schema.json の生成に加えて
-`.github/workflows/gh-sync.yaml` を生成する。
+`gh-sync init --downstream` は `.github/workflows/gh-sync.yaml` を生成する。
+`config.yaml` / `schema.json` は生成しない (upstream モードの生成物)。
 
-- 非インタラクティブ (`stdin` が TTY でない) 時は `--with-workflow` を明示した場合のみ生成。
+- 非インタラクティブ (`stdin` が TTY でない) 時は `--downstream` を明示した場合のみ生成。
 - TTY 時はモード選択後にインタラクティブな確認プロンプトを表示する。
 - 既存ファイルがある場合は `--force` がなければ上書き確認を行う (非 TTY では bail)。
 - 埋め込まれるバージョンは `gh-sync` 実行時の `CARGO_PKG_VERSION` (例: `v0.1.3`)。
+- `--with-skill` を付けると `.claude/skills/gh-sync/SKILL.md` を追加生成し、
+  marker 記法 (`gh-sync:keep-start` / `gh-sync:keep-end`) の使い方を Claude Code に伝える。
 
 ```bash
-# 非インタラクティブ例
-gh-sync init --repo naa0yama/boilerplate-rust --from-upstream --with-workflow --force
+# 非インタラクティブ例 (ワークフローのみ生成)
+gh-sync init --downstream --repo naa0yama/boilerplate-rust --force
+
+# skill ファイルも同時に生成する場合
+gh-sync init --downstream --repo naa0yama/boilerplate-rust --with-skill --force
 ```
 
 生成される `.github/workflows/gh-sync.yaml` の内容 (`--repo owner/repo` 指定時):
