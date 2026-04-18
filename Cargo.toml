@@ -22,6 +22,8 @@ repository = "https://github.com/naa0yama/boilerplate-rust"
 # -
 [workspace.dependencies]
 # gh-sync:keep-start
+# Project-specific dependencies are listed here.
+
 # Internal crates
 gh-sync-engine = { path = "crates/gh-sync-engine" }
 gh-sync-manifest = { path = "crates/gh-sync-manifest" }
