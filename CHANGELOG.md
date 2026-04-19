@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.3](https://github.com/naa0yama/gh-sync/compare/v0.2.2...v0.2.3) - 2026-04-19
+### Features 🎉
+- feat(engine): allow preserve_markers with strategy replace by @naa0yama in https://github.com/naa0yama/gh-sync/pull/46
+
 ## [v0.2.2](https://github.com/naa0yama/gh-sync/compare/v0.2.1...v0.2.2) - 2026-04-19
 
 ### Features 🎉
