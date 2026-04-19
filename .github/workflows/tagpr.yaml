@@ -65,21 +65,20 @@ jobs:
           # latestPullRequest() succeeds on its first attempt.
           # Remove this step once Songmu/tagpr extends its retry window.
           # ref: https://github.com/Songmu/tagpr/issues/330
-          MAX_ATTEMPTS=24
-          INTERVAL=5
-          for i in $(seq 1 "${MAX_ATTEMPTS}"); do
+          for i in $(seq 1 24); do
             count=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
               --jq 'length' 2>/dev/null || echo 0)
             if [ "${count}" -gt 0 ]; then
               echo "commit-to-PR index ready after ${i} attempt(s)"
+              # exit 0 ends only this run: shell; the next step still runs.
               exit 0
             fi
-            echo "attempt ${i}/${MAX_ATTEMPTS}: index not ready, sleeping ${INTERVAL}s"
-            sleep "${INTERVAL}"
+            echo "attempt ${i}/24: index not ready, sleeping 5s"
+            sleep 5
           done
           # HEAD may legitimately have no PR (direct push, workflow re-run).
           # Let tagpr's own logic decide rather than failing the job.
-          echo "::warning::commit-to-PR index did not populate within $((MAX_ATTEMPTS * INTERVAL))s; proceeding"
+          echo "::warning::commit-to-PR index did not populate within 120s; proceeding"
 
       - id: tagpr
         uses: Songmu/tagpr@9bbb945b2fb025126186661e27d55485e3fc6df6 # v1.18.3

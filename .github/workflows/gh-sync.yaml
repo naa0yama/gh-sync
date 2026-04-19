@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "0 18 * * *" # daily at 03:00 JST
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions: {}
 
@@ -13,29 +15,27 @@ concurrency:
 
 jobs:
   gh-sync:
-    name: file-sync
+    name: drift-issue
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write # Required to create branches and push commits
-      pull-requests: write # Required to create pull requests
+      contents: read
+      issues: write # Required to create and update drift issues
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: naa0yama/gh-sync@ede120ca84fcabeb1944e3c301b1f99b3d9185be # v0.3.0
+      - uses: naa0yama/gh-sync@1e2635dbfc27e544c28b82ec6faeffd4450154ff # v0.3.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          version: v0.3.0
           upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
-          apply-files: "true"
+          install-only: "true"
 
-      - name: Create PR if changed
+      - name: Sync drift issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh-sync pr \
-            --title "chore: sync files from upstream template" \
-            --body "Automated file sync by gh-sync scheduled workflow." \
-            --branch-prefix "gh-sync/file-sync"
+          gh-sync issue-sync \
+            --manifest .github/gh-sync/config.yaml \
+            --upstream-manifest naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml

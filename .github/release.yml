@@ -24,8 +24,8 @@ changelog:
       labels:
         - manager:mise
         - manager:github-actions
-        - managers:dockerfile
-        - managers:docker-compose
+        - manager:dockerfile
+        - manager:docker-compose
         - manager:regex
         - github-actions
         - renovate-config
