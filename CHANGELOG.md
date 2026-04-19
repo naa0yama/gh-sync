@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.2.2](https://github.com/naa0yama/gh-sync/compare/v0.2.1...v0.2.2) - 2026-04-19
+
+### Features 🎉
+
+- refactor(init): split into --upstream / --downstream modes by @naa0yama in https://github.com/naa0yama/gh-sync/pull/39
+
+### Development Environment 🔧
+
+- Update taiki-e/install-action action to v2.75.6 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/43
+- Update taiki-e/install-action action to v2.75.7 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/44
+
+### Other Changes
+
+- chore: add insertion guide markers for project-specific config blocks by @naa0yama in https://github.com/naa0yama/gh-sync/pull/45
+
 ## [v0.2.2](https://github.com/naa0yama/gh-sync/compare/v0.2.1...v0.2.2) - 2026-04-18
 
 ### Features 🎉
