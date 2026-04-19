@@ -3589,3 +3589,120 @@ fn apply_core_fields_keeps_merge_commit_fields_when_enabled() {
     assert_eq!(patches[0]["merge_commit_title"], "PR_TITLE");
     assert_eq!(patches[0]["merge_commit_message"], "PR_TITLE");
 }
+
+#[test]
+fn apply_core_fields_strips_merge_commit_fields_when_spec_already_disabled() {
+    // spec says allow_merge_commit=false (live side already disabled),
+    // only title is changing — must NOT reach the PATCH body.
+    let spec = Spec {
+        merge_strategy: Some(MergeStrategy {
+            allow_merge_commit: Some(false),
+            allow_squash_merge: None,
+            allow_rebase_merge: None,
+            allow_auto_merge: None,
+            allow_update_branch: None,
+            auto_delete_head_branches: None,
+            merge_commit_title: Some(String::from("PR_TITLE")),
+            merge_commit_message: Some(String::from("BLANK")),
+            squash_merge_commit_title: None,
+            squash_merge_commit_message: None,
+        }),
+        ..make_spec()
+    };
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_title"),
+            old: String::from("MERGE_MESSAGE"),
+            new: String::from("PR_TITLE"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.merge_commit_message"),
+            old: String::from("PR_TITLE"),
+            new: String::from("BLANK"),
+        },
+    ];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    // No PATCH should be sent because all changed fields were stripped.
+    assert_eq!(patches.len(), 0);
+}
+
+#[test]
+fn apply_core_fields_strips_squash_fields_when_spec_already_disabled() {
+    let spec = Spec {
+        merge_strategy: Some(MergeStrategy {
+            allow_merge_commit: None,
+            allow_squash_merge: Some(false),
+            allow_rebase_merge: None,
+            allow_auto_merge: None,
+            allow_update_branch: None,
+            auto_delete_head_branches: None,
+            merge_commit_title: None,
+            merge_commit_message: None,
+            squash_merge_commit_title: Some(String::from("PR_TITLE")),
+            squash_merge_commit_message: Some(String::from("BLANK")),
+        }),
+        ..make_spec()
+    };
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.squash_merge_commit_title"),
+            old: String::from("COMMIT_OR_PR_TITLE"),
+            new: String::from("PR_TITLE"),
+        },
+        SpecChange::FieldChanged {
+            field: String::from("merge_strategy.squash_merge_commit_message"),
+            old: String::from("COMMIT_MESSAGES"),
+            new: String::from("BLANK"),
+        },
+    ];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 0);
+}
+
+#[test]
+fn apply_core_fields_keeps_merge_commit_fields_when_spec_explicitly_enabled() {
+    let spec = Spec {
+        merge_strategy: Some(MergeStrategy {
+            allow_merge_commit: Some(true),
+            allow_squash_merge: None,
+            allow_rebase_merge: None,
+            allow_auto_merge: None,
+            allow_update_branch: None,
+            auto_delete_head_branches: None,
+            merge_commit_title: Some(String::from("PR_TITLE")),
+            merge_commit_message: None,
+            squash_merge_commit_title: None,
+            squash_merge_commit_message: None,
+        }),
+        ..make_spec()
+    };
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![SpecChange::FieldChanged {
+        field: String::from("merge_strategy.merge_commit_title"),
+        old: String::from("MERGE_MESSAGE"),
+        new: String::from("PR_TITLE"),
+    }];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 1);
+    assert_eq!(patches[0]["merge_commit_title"], "PR_TITLE");
+}
+
+#[test]
+fn apply_core_fields_strips_merge_commit_fields_when_spec_is_none() {
+    // When spec has no merge_strategy at all, treat as "not enabled" → strip.
+    let spec = make_spec(); // merge_strategy: None
+    let client = MockRepoClient::new("owner/repo");
+    let changes = vec![SpecChange::FieldChanged {
+        field: String::from("merge_strategy.merge_commit_title"),
+        old: String::from("MERGE_MESSAGE"),
+        new: String::from("PR_TITLE"),
+    }];
+    apply_changes(&changes, &spec, "owner/repo", &client).unwrap();
+    let patches = client.applied_patches.borrow();
+    assert_eq!(patches.len(), 0);
+}
