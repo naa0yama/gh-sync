@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.2](https://github.com/naa0yama/gh-sync/compare/v0.3.1...v0.3.2) - 2026-04-19
+### Other Changes
+- feat!: replace gh-sync pr with gh-sync issue-sync subcommand by @naa0yama in https://github.com/naa0yama/gh-sync/pull/53
+
 ## [v0.3.1](https://github.com/naa0yama/gh-sync/compare/v0.3.0...v0.3.1) - 2026-04-19
 
 ### Bug Fixes 🐌
