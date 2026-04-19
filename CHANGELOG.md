@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.0](https://github.com/naa0yama/gh-sync/compare/v0.2.3...v0.3.0) - 2026-04-19
+### Bug Fixes 🐌
+- fix(init): update schema.json when content is stale by @naa0yama in https://github.com/naa0yama/gh-sync/pull/48
+
 ## [v0.2.3](https://github.com/naa0yama/gh-sync/compare/v0.2.2...v0.2.3) - 2026-04-19
 
 ### Features 🎉
