@@ -4,6 +4,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:5080/api/default"
 OPENOBSERVE_VERSION = "v0.70.3"
 
 # gh-sync:keep-start
+# Project-specific dependencies are listed here.
+
 RUST_LOG = "warn,gh_sync=trace"
 # gh-sync:keep-end
 
