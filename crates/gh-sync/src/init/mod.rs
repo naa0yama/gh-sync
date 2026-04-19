@@ -18,6 +18,8 @@ use std::process::ExitCode;
 use anyhow::Context as _;
 use cli::InitArgs;
 
+use crate::sync::detect;
+use crate::sync::runner::{GhRunner, SystemGhRunner};
 use crate::sync::upstream::GhFetcher;
 
 // ---------------------------------------------------------------------------
@@ -71,12 +73,20 @@ fn write_file(path: &Path, content: &str) -> anyhow::Result<()> {
 
 /// Resolve the repository argument, prompting interactively when not provided.
 ///
+/// `default_hint` is pre-filled into the interactive prompt when `--repo` is
+/// absent, so the user can simply press Enter to accept the detected value.
+///
 /// # Errors
 ///
 /// Returns an error when the repo format is invalid, the prompt is cancelled,
 /// or `--repo` is absent in non-interactive mode.
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn resolve_repo(args: &InitArgs, prompt: &str, non_tty_example: &str) -> anyhow::Result<String> {
+fn resolve_repo(
+    args: &InitArgs,
+    prompt: &str,
+    non_tty_example: &str,
+    default_hint: Option<&str>,
+) -> anyhow::Result<String> {
     match &args.repo {
         Some(r) => {
             validate_repo_format(r)?;
@@ -84,10 +94,13 @@ fn resolve_repo(args: &InitArgs, prompt: &str, non_tty_example: &str) -> anyhow:
         }
         None => {
             if io::stdin().is_terminal() {
-                dialoguer::Input::<String>::new()
-                    .with_prompt(prompt)
-                    .validate_with(|input: &String| -> Result<(), &str> {
-                        if is_valid_repo(input) {
+                let mut input = dialoguer::Input::<String>::new().with_prompt(prompt);
+                if let Some(hint) = default_hint {
+                    input = input.default(hint.to_owned()).show_default(true);
+                }
+                input
+                    .validate_with(|i: &String| -> Result<(), &str> {
+                        if is_valid_repo(i) {
                             Ok(())
                         } else {
                             Err("must be owner/name format (e.g. naa0yama/boilerplate-rust)")
@@ -192,7 +205,7 @@ fn confirm_overwrite_with_diff(
 /// Writes files appropriate to the selected mode (upstream or downstream).
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn execute(args: &InitArgs) -> ExitCode {
-    match run(args, &GhFetcher) {
+    match run(args, &GhFetcher, &SystemGhRunner) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             tracing::error!("init failed: {e:#}");
@@ -210,11 +223,12 @@ pub fn execute(args: &InitArgs) -> ExitCode {
 pub fn run(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
+    runner: &dyn GhRunner,
 ) -> anyhow::Result<()> {
     if args.upstream {
-        run_upstream(args, fetcher)
+        run_upstream(args, fetcher, runner)
     } else {
-        run_downstream(args, fetcher)
+        run_downstream(args, fetcher, runner)
     }
 }
 
@@ -228,6 +242,7 @@ pub fn run(
 fn run_upstream(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
+    runner: &dyn GhRunner,
 ) -> anyhow::Result<()> {
     let output = args
         .output
@@ -258,12 +273,14 @@ fn run_upstream(
     }
 
     // -----------------------------------------------------------------------
-    // 2. Determine repo
+    // 2. Determine repo (detect current repo as default hint)
     // -----------------------------------------------------------------------
+    let hint = detect::detect_repo_hint(runner, false);
     let repo = resolve_repo(
         args,
         "Upstream repository (owner/name)",
         "gh-sync init --upstream --repo owner/name --select",
+        hint.as_deref(),
     )?;
 
     // -----------------------------------------------------------------------
@@ -314,14 +331,17 @@ fn run_upstream(
 fn run_downstream(
     args: &InitArgs,
     fetcher: &dyn crate::sync::upstream::UpstreamFetcher,
+    runner: &dyn GhRunner,
 ) -> anyhow::Result<()> {
     // -----------------------------------------------------------------------
-    // 1. Determine repo
+    // 1. Determine repo (detect fork/template parent as default hint)
     // -----------------------------------------------------------------------
+    let hint = detect::detect_repo_hint(runner, true);
     let repo = resolve_repo(
         args,
         "Upstream template repository (owner/name)",
         "gh-sync init --downstream --repo owner/name",
+        hint.as_deref(),
     )?;
 
     // -----------------------------------------------------------------------

@@ -233,10 +233,10 @@ rules:
 
 #### `patch` 戦略の追加フィールド
 
-| フィールド         | 型      | 必須   | デフォルト                             | 説明                                                                                   |
-| ------------------ | ------- | ------ | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| `patch`            | string  | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対)                                |
-| `preserve_markers` | boolean | いいえ | `false`                                | `true` にすると `gh-sync:keep-start` / `gh-sync:keep-end` で囲まれたブロックを保護する |
+| フィールド         | 型      | 必須   | デフォルト                             | 説明                                                                                                              |
+| ------------------ | ------- | ------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `patch`            | string  | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対)                                                           |
+| `preserve_markers` | boolean | いいえ | `false`                                | `true` にすると `gh-sync:keep-start` / `gh-sync:keep-end` で囲まれたブロックを保護する (`patch` / `replace` のみ) |
 
 省略時は `path` をそのまま使い慣例パスを自動解決する。
 慣例から外れる配置にしたい場合のみ明示指定する:
@@ -259,7 +259,8 @@ rules:
 
 - `delete`: `source`, `patch` フィールド不可
 - `patch`: `source` フィールド不可
-- `replace`, `create_only`, `delete`, `ignore`: `patch`, `preserve_markers` フィールド不可
+- `create_only`, `delete`, `ignore`: `patch`, `preserve_markers` フィールド不可
+- `replace`: `patch` フィールド不可 (`preserve_markers` は可)
 - いずれのルールでも未知のフィールドはバリデーションエラー
 
 ### 2.3 パスの制約
@@ -1073,8 +1074,17 @@ naa0yama/boilerplate-rust:.github/gh-sync/config.yaml  # ref 省略 → HEAD
    - 指定された参照を `gh api` で取得し、YAML をパースする
    - `--manifest` に指定されたローカルファイルが存在すれば、`merge_overlay` を適用する
    - ローカルファイルが存在しない場合は upstream マニフェストをそのまま使用する
-2. `--upstream-manifest` が指定されない場合:
-   - 従来どおり `--manifest` のローカルファイルのみを使用する
+2. `--upstream-manifest` が指定されない場合 (自動検出):
+   - TTY 環境かつ `--yes` なし: `gh api repos/{owner}/{repo}` で fork 親または
+     テンプレート親を自動検出し、使用するか確認プロンプトを表示する
+   - ユーザーが承諾した場合: 検出した `owner/repo@branch:manifest-path` を
+     upstream マニフェストとして使用する (上記 1 と同じ流れ)
+   - 非 TTY / `--yes` 指定 / 検出失敗 / ユーザー拒否: ローカルファイルのみを使用する
+
+**自動検出の優先順位**: fork 親 (`parent` フィールド) > テンプレート親 (`template_repository`)
+
+**高速パス**: GitHub Actions 環境では `GITHUB_REPOSITORY` 環境変数を参照し、
+`gh repo view` の呼び出しを省略する。
 
 ### 12.4 マージ規則
 
@@ -1129,14 +1139,20 @@ files:
 
 ### 12.5.1 preserve_markers — ファイル内マーカーでブロックを保護
 
-`preserve_markers` は `strategy: patch` ルール専用のオプションフィールドで、downstream のファイル内に
-マーカーコメントを書いてブロックを保護する仕組みを有効にする。
+`preserve_markers` は `strategy: patch` または `strategy: replace` ルールに指定できるオプションフィールドで、
+downstream のファイル内にマーカーコメントを書いてブロックを保護する仕組みを有効にする。
 
 ```yaml
-# local overlay (.github/gh-sync/config.yaml)
+# .github/gh-sync/config.yaml
 files:
+  # patch ファイルを使いつつマーカーも保護したい場合
   - path: Cargo.toml
     strategy: patch
+    preserve_markers: true
+
+  # マーカー保護だけが目的で patch ファイル不要の場合
+  - path: .vscode/launch.json
+    strategy: replace
     preserve_markers: true
 ```
 
@@ -1206,7 +1222,7 @@ edition = "2021"
 
 **制約:**
 
-- `strategy: patch` でのみ有効。他の strategy と組み合わせるとスキーマエラーになる。
+- `strategy: patch` または `strategy: replace` でのみ有効。`create_only`、`delete`、`ignore` と組み合わせるとスキーマエラーになる。
 - マーカーのネストは禁止。
 - マーカーのペアが一致しない (orphan) 場合は sync が停止する。
 

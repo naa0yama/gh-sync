@@ -84,7 +84,14 @@ pub fn run(
                     },
                     Ok(FetchResult::Content(upstream)) => {
                         if rule.strategy == Strategy::Replace {
-                            strategy::replace::apply(&upstream, local_bytes.as_deref())
+                            if rule.preserve_markers.unwrap_or(false) {
+                                strategy::replace::apply_with_markers(
+                                    &upstream,
+                                    local_bytes.as_deref(),
+                                )
+                            } else {
+                                strategy::replace::apply(&upstream, local_bytes.as_deref())
+                            }
                         } else {
                             strategy::create_only::apply(&upstream, local_bytes.is_some())
                         }
@@ -551,4 +558,47 @@ mod tests {
     }
 
     fn _use_dir(_dir: &TempDir) {}
+
+    // ------------------------------------------------------------------
+    // replace + preserve_markers
+    // ------------------------------------------------------------------
+
+    #[cfg_attr(
+        miri,
+        ignore = "spawns diff process via unified_diff for Changed results"
+    )]
+    #[test]
+    fn sync_replace_preserve_markers_writes_merged_content() {
+        // Arrange: local file has a marker block that should survive after sync.
+        let dir = tempfile::tempdir().unwrap();
+        let marker_block = b"# gh-sync:keep-start\nb = local\n# gh-sync:keep-end\n";
+        let local_content = [b"a = old\n".as_slice(), marker_block.as_slice()].concat();
+        std::fs::write(dir.path().join("cfg.toml"), &local_content).unwrap();
+
+        let manifest = make_manifest(vec![Rule {
+            path: String::from("cfg.toml"),
+            strategy: Strategy::Replace,
+            source: None,
+            patch: None,
+            preserve_markers: Some(true),
+        }]);
+        // Upstream has only the non-marker line updated.
+        let fetcher = MockFetcher::content(b"a = new\n".to_vec());
+        let runner = MockPatchRunner::success(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let (code, actions) = run(&manifest, dir.path(), &fetcher, &runner, &mut buf).unwrap();
+        apply_outcomes(actions).unwrap();
+
+        // Assert
+        let out = String::from_utf8(buf).unwrap();
+        assert!(matches!(code, ExitCode::SUCCESS), "expected SUCCESS: {out}");
+        let written = std::fs::read(dir.path().join("cfg.toml")).unwrap();
+        let expected: Vec<u8> = [b"a = new\n".as_slice(), marker_block.as_slice()].concat();
+        assert_eq!(
+            written, expected,
+            "marker block must be preserved after replace+preserve_markers sync"
+        );
+    }
 }

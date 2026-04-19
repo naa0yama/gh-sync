@@ -17,6 +17,7 @@ pub use gh_sync_engine::repo::{
 };
 use gh_sync_manifest::Spec;
 
+use crate::sync::detect;
 use crate::sync::manifest;
 use crate::sync::runner::{GhRunner, SystemGhRunner};
 use crate::sync::upstream::GhFetcher;
@@ -591,29 +592,39 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn execute(args: &super::cli::SyncRepoArgs) -> ExitCode {
     let mut stdout = io::stdout();
-    execute_inner(args, &GhRepoClientImpl::new(), &mut stdout)
+    let runner = SystemGhRunner;
+    let effective_upstream = detect::resolve_effective_upstream(
+        args.upstream_manifest.as_deref(),
+        args.yes || args.ci_check || args.dry_run,
+        &args.manifest,
+        &runner,
+    );
+    execute_inner(
+        args,
+        effective_upstream.as_deref(),
+        &GhRepoClientImpl::new(),
+        &mut stdout,
+    )
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn execute_inner(
     args: &super::cli::SyncRepoArgs,
+    effective_upstream_manifest: Option<&str>,
     client: &dyn GhRepoClient,
     w: &mut dyn Write,
 ) -> ExitCode {
     // Resolve the effective manifest (upstream fetch + optional local overlay,
     // or just local file when --upstream-manifest is not given).
     let fetcher = GhFetcher;
-    let manifest = match upstream_manifest::resolve(
-        args.upstream_manifest.as_deref(),
-        &args.manifest,
-        &fetcher,
-    ) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::error!("failed to resolve manifest: {e:#}");
-            return ExitCode::FAILURE;
-        }
-    };
+    let manifest =
+        match upstream_manifest::resolve(effective_upstream_manifest, &args.manifest, &fetcher) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!("failed to resolve manifest: {e:#}");
+                return ExitCode::FAILURE;
+            }
+        };
 
     // Validate schema before making any API calls.
     // A misconfigured manifest must be caught early to prevent partial apply.
@@ -1894,7 +1905,12 @@ mod tests {
         };
         let client_mock = MockRepoClient::new("owner/repo");
         let mut buf: Vec<u8> = Vec::new();
-        let code = execute_inner(&args, &client_mock, &mut buf);
+        let code = execute_inner(
+            &args,
+            args.upstream_manifest.as_deref(),
+            &client_mock,
+            &mut buf,
+        );
         // Must fail due to validation, before any API calls.
         assert_eq!(code, ExitCode::FAILURE);
         assert!(
@@ -1922,7 +1938,12 @@ mod tests {
         };
         let client_mock = MockRepoClient::new("owner/repo");
         let mut buf: Vec<u8> = Vec::new();
-        let code = execute_inner(&args, &client_mock, &mut buf);
+        let code = execute_inner(
+            &args,
+            args.upstream_manifest.as_deref(),
+            &client_mock,
+            &mut buf,
+        );
         assert_eq!(code, ExitCode::SUCCESS);
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("nothing to do"), "unexpected: {out}");
@@ -1947,7 +1968,12 @@ mod tests {
         };
         let client_mock = MockRepoClient::new("owner/repo");
         let mut buf: Vec<u8> = Vec::new();
-        let code = execute_inner(&args, &client_mock, &mut buf);
+        let code = execute_inner(
+            &args,
+            args.upstream_manifest.as_deref(),
+            &client_mock,
+            &mut buf,
+        );
         assert_eq!(code, ExitCode::FAILURE);
     }
 
@@ -1970,7 +1996,12 @@ mod tests {
         };
         let client_mock = MockRepoClient::new("owner/repo");
         let mut buf: Vec<u8> = Vec::new();
-        let code = execute_inner(&args, &client_mock, &mut buf);
+        let code = execute_inner(
+            &args,
+            args.upstream_manifest.as_deref(),
+            &client_mock,
+            &mut buf,
+        );
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(client_mock.applied_patches.borrow().is_empty());
     }
