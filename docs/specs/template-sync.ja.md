@@ -233,10 +233,10 @@ rules:
 
 #### `patch` 戦略の追加フィールド
 
-| フィールド         | 型      | 必須   | デフォルト                             | 説明                                                                                   |
-| ------------------ | ------- | ------ | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| `patch`            | string  | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対)                                |
-| `preserve_markers` | boolean | いいえ | `false`                                | `true` にすると `gh-sync:keep-start` / `gh-sync:keep-end` で囲まれたブロックを保護する |
+| フィールド         | 型      | 必須   | デフォルト                             | 説明                                                                                                              |
+| ------------------ | ------- | ------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `patch`            | string  | いいえ | `.github/gh-sync/patches/<path>.patch` | unified diff ファイルのパス(リポジトリルートからの相対)                                                           |
+| `preserve_markers` | boolean | いいえ | `false`                                | `true` にすると `gh-sync:keep-start` / `gh-sync:keep-end` で囲まれたブロックを保護する (`patch` / `replace` のみ) |
 
 省略時は `path` をそのまま使い慣例パスを自動解決する。
 慣例から外れる配置にしたい場合のみ明示指定する:
@@ -259,7 +259,8 @@ rules:
 
 - `delete`: `source`, `patch` フィールド不可
 - `patch`: `source` フィールド不可
-- `replace`, `create_only`, `delete`, `ignore`: `patch`, `preserve_markers` フィールド不可
+- `create_only`, `delete`, `ignore`: `patch`, `preserve_markers` フィールド不可
+- `replace`: `patch` フィールド不可 (`preserve_markers` は可)
 - いずれのルールでも未知のフィールドはバリデーションエラー
 
 ### 2.3 パスの制約
@@ -1129,14 +1130,20 @@ files:
 
 ### 12.5.1 preserve_markers — ファイル内マーカーでブロックを保護
 
-`preserve_markers` は `strategy: patch` ルール専用のオプションフィールドで、downstream のファイル内に
-マーカーコメントを書いてブロックを保護する仕組みを有効にする。
+`preserve_markers` は `strategy: patch` または `strategy: replace` ルールに指定できるオプションフィールドで、
+downstream のファイル内にマーカーコメントを書いてブロックを保護する仕組みを有効にする。
 
 ```yaml
-# local overlay (.github/gh-sync/config.yaml)
+# .github/gh-sync/config.yaml
 files:
+  # patch ファイルを使いつつマーカーも保護したい場合
   - path: Cargo.toml
     strategy: patch
+    preserve_markers: true
+
+  # マーカー保護だけが目的で patch ファイル不要の場合
+  - path: .vscode/launch.json
+    strategy: replace
     preserve_markers: true
 ```
 
@@ -1206,7 +1213,7 @@ edition = "2021"
 
 **制約:**
 
-- `strategy: patch` でのみ有効。他の strategy と組み合わせるとスキーマエラーになる。
+- `strategy: patch` または `strategy: replace` でのみ有効。`create_only`、`delete`、`ignore` と組み合わせるとスキーマエラーになる。
 - マーカーのネストは禁止。
 - マーカーのペアが一致しない (orphan) 場合は sync が停止する。
 

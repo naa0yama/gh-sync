@@ -397,8 +397,8 @@ pub struct Rule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
     /// When `true`, lines enclosed by `gh-sync:keep-start` / `gh-sync:keep-end`
-    /// marker comments are excluded from drift detection and patch generation.
-    /// Only valid with `strategy: patch`.
+    /// marker comments are excluded from drift detection and preserved on write-back.
+    /// Valid with `strategy: patch` or `strategy: replace`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preserve_markers: Option<bool>,
 }
@@ -597,11 +597,13 @@ pub fn validate_schema(manifest: &Manifest) -> Result<(), SyncError> {
                 }
             }
         }
-        if rule.strategy != Strategy::Patch && rule.preserve_markers.is_some() {
+        if !matches!(rule.strategy, Strategy::Patch | Strategy::Replace)
+            && rule.preserve_markers.is_some()
+        {
             errors.push(ValidationError::rule(
                 i,
                 "preserve_markers",
-                "field only allowed for strategy 'patch'",
+                "field only allowed for strategy 'patch' or 'replace'",
             ));
         }
     }
@@ -1238,6 +1240,112 @@ files:
     patch: foo.patch
 ",
             "patch",
+        );
+    }
+
+    // --- validate_schema: preserve_markers ---
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_accepts_replace_with_preserve_markers() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: replace
+    preserve_markers: true
+",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_accepts_patch_with_preserve_markers() {
+        expect_schema_ok(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: patch
+    preserve_markers: true
+",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_rejects_create_only_with_preserve_markers() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: create_only
+    preserve_markers: true
+",
+            "preserve_markers",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_rejects_delete_with_preserve_markers() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: delete
+    preserve_markers: true
+",
+            "preserve_markers",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_rejects_ignore_with_preserve_markers() {
+        expect_schema_error(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: ignore
+    preserve_markers: true
+",
+            "preserve_markers",
+        );
+    }
+
+    #[cfg_attr(miri, ignore = "libyml ptr_offset_from UB under Miri")]
+    #[test]
+    fn validate_schema_error_message_mentions_patch_or_replace() {
+        let m = manifest_from_yaml(
+            r"
+upstream:
+  repo: owner/repo
+files:
+  - path: foo.txt
+    strategy: delete
+    preserve_markers: true
+",
+        );
+        let Err(SyncError::Validation(errors)) = validate_schema(&m) else {
+            panic!("expected Validation error");
+        };
+        let msg = errors
+            .iter()
+            .find(|e| e.field == "preserve_markers")
+            .map_or("", |e| e.message.as_str());
+        assert!(
+            msg.contains("patch") && msg.contains("replace"),
+            "error message should mention both 'patch' and 'replace': {msg}"
         );
     }
 

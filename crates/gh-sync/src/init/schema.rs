@@ -320,6 +320,10 @@ pub const SCHEMA_JSON: &str = r#"{
             "type": "string",
             "minLength": 1,
             "description": "Explicit patch file path (patch strategy only; defaults to .github/gh-sync/patches/<path>.patch)"
+          },
+          "preserve_markers": {
+            "type": "boolean",
+            "description": "Preserve gh-sync:keep-start/keep-end marker blocks from the local file. Only used when strategy is 'patch' or 'replace'."
           }
         }
       }

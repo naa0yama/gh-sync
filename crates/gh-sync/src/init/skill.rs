@@ -55,16 +55,23 @@ JSON / JSONC (`//` comment style):
 
 ## Enabling in the Manifest
 
-Add `preserve_markers: true` to each `strategy: patch` rule that uses marker
-blocks. This field is set in the upstream `gh-sync.yaml` manifest, not in a
-local overlay.
+Add `preserve_markers: true` to any `strategy: patch` or `strategy: replace`
+rule that uses marker blocks. This field is set in the upstream `gh-sync.yaml`
+manifest, not in a local overlay.
 
 ```yaml
 files:
   - path: Cargo.toml
     strategy: patch
     preserve_markers: true
+  - path: .vscode/launch.json
+    strategy: replace
+    preserve_markers: true
 ```
+
+Use `strategy: replace` when you only need marker preservation with no patch
+file. Use `strategy: patch` when you also need a diff-based patch applied on
+top of the upstream content.
 
 ## Behavior
 
@@ -116,6 +123,8 @@ RUST_LOG = \"warn,gh_sync=trace\"
 
 - `preserve_markers: true` is opt-in per rule. Rules without it treat marker
   comment lines as ordinary content.
+- Valid with `strategy: patch` or `strategy: replace`. Other strategies
+  (`create_only`, `delete`, `ignore`) reject this field.
 - Nested marker blocks are not supported and produce an error.
 - Use `strategy: ignore` to skip syncing an entire file rather than
   protecting specific regions within it.

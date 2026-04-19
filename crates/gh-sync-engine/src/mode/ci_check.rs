@@ -156,7 +156,20 @@ fn evaluate_drift(
                 };
 
             let expected = if rule.strategy == Strategy::Replace {
-                upstream
+                if rule.preserve_markers.unwrap_or(false) {
+                    match strategy::replace::apply_with_markers(&upstream, local_bytes) {
+                        StrategyResult::Changed { content } => content,
+                        StrategyResult::Unchanged => {
+                            local_bytes.map(<[u8]>::to_vec).unwrap_or(upstream)
+                        }
+                        StrategyResult::Error(msg) => {
+                            return (false, format!("marker error: {msg}"), String::new(), true);
+                        }
+                        _ => upstream,
+                    }
+                } else {
+                    upstream
+                }
             } else {
                 // Apply patch to get expected content
                 let patch_path = manifest::resolve_patch_path(rule);
@@ -460,6 +473,71 @@ mod tests {
         assert_eq!(extract_pr_number("refs/heads/main"), None);
         assert_eq!(extract_pr_number("refs/pull/abc/merge"), None);
         assert_eq!(extract_pr_number("refs/pull/123/head"), None);
+    }
+
+    // ------------------------------------------------------------------
+    // replace + preserve_markers
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn ci_check_replace_preserve_markers_reports_up_to_date_when_only_blocks_differ() {
+        // Arrange: local has a marker block; upstream has no markers (just baseline).
+        // After merge the expected = upstream_stripped + local_blocks = local → no drift.
+        let dir = tempfile::tempdir().unwrap();
+        let marker_block = b"# gh-sync:keep-start\nb = local\n# gh-sync:keep-end\n";
+        let local_content = [b"a = 1\n".as_slice(), marker_block.as_slice()].concat();
+        std::fs::write(dir.path().join("cfg.toml"), &local_content).unwrap();
+
+        let manifest = make_manifest(vec![Rule {
+            path: String::from("cfg.toml"),
+            strategy: Strategy::Replace,
+            source: None,
+            patch: None,
+            preserve_markers: Some(true),
+        }]);
+        let fetcher = MockFetcher::content(b"a = 1\n".to_vec());
+        let runner = MockPatchRunner::success(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let code = run(&manifest, dir.path(), &fetcher, &runner, &mut buf).unwrap();
+
+        // Assert
+        let out = String::from_utf8(buf).unwrap();
+        assert!(matches!(code, ExitCode::SUCCESS), "expected SUCCESS: {out}");
+        assert!(out.contains("[OK"), "expected OK (no drift): {out}");
+    }
+
+    #[cfg_attr(
+        miri,
+        ignore = "spawns gh process via maybe_post_pr_comment when GITHUB_ACTIONS is set"
+    )]
+    #[test]
+    fn ci_check_replace_preserve_markers_reports_drift_when_non_marker_differs() {
+        // Arrange: upstream changed; local has stale non-marker content.
+        let dir = tempfile::tempdir().unwrap();
+        let marker_block = b"# gh-sync:keep-start\nb = local\n# gh-sync:keep-end\n";
+        let local_content = [b"a = old\n".as_slice(), marker_block.as_slice()].concat();
+        std::fs::write(dir.path().join("cfg.toml"), &local_content).unwrap();
+
+        let manifest = make_manifest(vec![Rule {
+            path: String::from("cfg.toml"),
+            strategy: Strategy::Replace,
+            source: None,
+            patch: None,
+            preserve_markers: Some(true),
+        }]);
+        let fetcher = MockFetcher::content(b"a = new\n".to_vec());
+        let runner = MockPatchRunner::success(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let code = run(&manifest, dir.path(), &fetcher, &runner, &mut buf).unwrap();
+
+        // Assert
+        let out = String::from_utf8(buf).unwrap();
+        assert!(matches!(code, ExitCode::FAILURE), "expected FAILURE: {out}");
+        assert!(out.contains("[DRIFT"), "expected DRIFT: {out}");
     }
 
     // ------------------------------------------------------------------
