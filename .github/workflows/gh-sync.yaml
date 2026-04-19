@@ -27,6 +27,7 @@ jobs:
       - uses: naa0yama/gh-sync@ede120ca84fcabeb1944e3c301b1f99b3d9185be # v0.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          version: v0.3.0
           upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
           apply-files: "true"
 
