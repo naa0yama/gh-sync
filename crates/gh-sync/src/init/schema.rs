@@ -1,5 +1,17 @@
-use std::io;
 use std::path::Path;
+
+use anyhow::Context as _;
+
+/// Outcome of a `write_schema_file` call.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WriteOutcome {
+    /// The file did not exist and was created.
+    Created,
+    /// The file existed with different content and was overwritten.
+    Updated,
+    /// The file existed with identical content; no write was performed.
+    Unchanged,
+}
 
 /// JSON Schema for the gh-sync manifest format (yaml-language-server compatible).
 pub const SCHEMA_JSON: &str = r#"{
@@ -339,17 +351,26 @@ pub const fn comment() -> &'static str {
     "# yaml-language-server: $schema=./schema.json\n"
 }
 
-/// Write `schema.json` to `dir` if the file does not already exist.
+/// Write `schema.json` to `dir`, always ensuring the file matches `SCHEMA_JSON`.
 ///
 /// # Errors
 ///
-/// Returns an error when the file cannot be created or written.
-pub fn write_schema_file(dir: &Path) -> io::Result<()> {
+/// Returns an error when the file cannot be read or written.
+pub fn write_schema_file(dir: &Path) -> anyhow::Result<WriteOutcome> {
     let dest = dir.join("schema.json");
-    if dest.exists() {
-        return Ok(());
-    }
-    std::fs::write(dest, SCHEMA_JSON)
+    let outcome = if dest.exists() {
+        let existing = std::fs::read_to_string(&dest)
+            .with_context(|| format!("failed to read '{}'", dest.display()))?;
+        if existing == SCHEMA_JSON {
+            return Ok(WriteOutcome::Unchanged);
+        }
+        WriteOutcome::Updated
+    } else {
+        WriteOutcome::Created
+    };
+    std::fs::write(&dest, SCHEMA_JSON)
+        .with_context(|| format!("failed to write '{}'", dest.display()))?;
+    Ok(outcome)
 }
 
 // ---------------------------------------------------------------------------
@@ -378,17 +399,31 @@ mod tests {
     #[test]
     fn write_schema_file_creates_file() {
         let dir = TempDir::new().unwrap();
-        write_schema_file(dir.path()).unwrap();
+        let outcome = write_schema_file(dir.path()).unwrap();
+        assert_eq!(outcome, WriteOutcome::Created);
         let content = std::fs::read_to_string(dir.path().join("schema.json")).unwrap();
         serde_json::from_str::<serde_json::Value>(&content).unwrap();
     }
 
     #[test]
-    fn write_schema_file_does_not_overwrite() {
+    fn write_schema_file_overwrites_stale_content() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("schema.json");
-        std::fs::write(&path, b"existing").unwrap();
-        write_schema_file(dir.path()).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), b"existing");
+        std::fs::write(&path, b"stale").unwrap();
+        let outcome = write_schema_file(dir.path()).unwrap();
+        assert_eq!(outcome, WriteOutcome::Updated);
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, SCHEMA_JSON);
+    }
+
+    #[test]
+    fn write_schema_file_returns_unchanged_when_identical() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("schema.json");
+        std::fs::write(&path, SCHEMA_JSON).unwrap();
+        let outcome = write_schema_file(dir.path()).unwrap();
+        assert_eq!(outcome, WriteOutcome::Unchanged);
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, SCHEMA_JSON);
     }
 }
