@@ -6,6 +6,8 @@ pub mod detect;
 pub mod diff;
 /// Error types for manifest validation and sync operations
 pub mod error;
+/// Parsing GitHub API error responses from gh CLI stdout/stderr
+pub mod gh_error;
 /// Manifest schema, loading, and validation
 pub mod manifest;
 /// Synchronisation modes (validate, sync, ci-check, patch-refresh)
@@ -77,7 +79,7 @@ fn execute_file(args: &cli::SyncFileArgs) -> ExitCode {
 
     // Resolve the effective manifest (upstream fetch + optional local overlay,
     // or just local file when --upstream-manifest is not given).
-    let fetcher = GhFetcher;
+    let fetcher = GhFetcher::new();
     let manifest =
         match upstream_manifest::resolve(effective_upstream.as_deref(), &args.manifest, &fetcher) {
             Ok(m) => m,
