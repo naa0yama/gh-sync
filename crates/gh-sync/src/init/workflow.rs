@@ -34,6 +34,7 @@ jobs:
       - uses: naa0yama/gh-sync@{{sha}} # {{version}}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          version: {{version}}
 {{upstream_manifest_line}}
           apply-files: \"true\"
 
@@ -136,6 +137,10 @@ mod tests {
         assert!(
             out.contains("apply-files: \"true\""),
             "missing apply-files input"
+        );
+        assert!(
+            out.contains("version: v0.1.0"),
+            "missing explicit version input"
         );
         assert!(out.contains("gh-sync pr"), "missing gh-sync pr step");
     }
