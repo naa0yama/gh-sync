@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.3.1](https://github.com/naa0yama/gh-sync/compare/v0.3.0...v0.3.1) - 2026-04-19
+
+### Bug Fixes 🐌
+
+- fix(init): emit explicit version input in generated gh-sync workflow by @naa0yama in https://github.com/naa0yama/gh-sync/pull/52
+
+### Development Environment 🔧
+
+- ci: improve workflows and update gh-sync to v0.3.0 by @naa0yama in https://github.com/naa0yama/gh-sync/pull/50
+
 ## [v0.3.0](https://github.com/naa0yama/gh-sync/compare/v0.2.3...v0.3.0) - 2026-04-19
 
 ### Bug Fixes 🐌
