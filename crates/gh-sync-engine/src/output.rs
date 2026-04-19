@@ -262,8 +262,8 @@ pub fn emit_summary(w: &mut dyn Write, summary: &Summary) -> std::io::Result<()>
 // ---------------------------------------------------------------------------
 
 /// A single rule evaluation result for `--ci-check` mode.
-#[allow(missing_debug_implementations)] // Rule reference — Debug on the wrapper is not needed
 #[allow(dead_code)] // `detail` is set for completeness; `rule`/`drifted`/`diff` are consumed
+#[derive(Debug)]
 pub struct DriftOutcome<'a> {
     /// The evaluated rule.
     pub rule: &'a Rule,

@@ -3,7 +3,8 @@ use std::path::Path;
 /// Default output path for the generated workflow file.
 pub const WORKFLOW_PATH: &str = ".github/workflows/gh-sync.yaml";
 
-/// Workflow template with `{{version}}`, `{{sha}}`, and `{{upstream_manifest_line}}` placeholders.
+/// Workflow template with `{{version}}`, `{{sha}}`, `{{upstream_manifest_line}}`,
+/// and `{{upstream_manifest_arg_line}}` placeholders.
 const TEMPLATE: &str = "\
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: gh-sync
@@ -11,6 +12,8 @@ on:
   schedule:
     - cron: \"0 18 * * *\" # daily at 03:00 JST
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions: {}
 
@@ -20,12 +23,12 @@ concurrency:
 
 jobs:
   gh-sync:
-    name: file-sync
+    name: drift-issue
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write # Required to create branches and push commits
-      pull-requests: write # Required to create pull requests
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -34,41 +37,46 @@ jobs:
       - uses: naa0yama/gh-sync@{{sha}} # {{version}}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          version: {{version}}
 {{upstream_manifest_line}}
-          apply-files: \"true\"
+          install-only: \"true\"
 
-      - name: Create PR if changed
+      - name: Sync drift issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh-sync pr \\
-            --title \"chore: sync files from upstream template\" \\
-            --body \"Automated file sync by gh-sync scheduled workflow.\" \\
-            --branch-prefix \"gh-sync/file-sync\"
+          gh-sync issue-sync \\
+            --manifest .github/gh-sync/config.yaml{{upstream_manifest_arg_line}}
 ";
 
-/// Render the workflow template by substituting `{{version}}`, `{{sha}}`, and
-/// `{{upstream_manifest_line}}`.
+/// Render the workflow template by substituting `{{version}}`, `{{sha}}`,
+/// `{{upstream_manifest_line}}`, and `{{upstream_manifest_arg_line}}`.
 ///
 /// - `version`: the gh-sync release tag (e.g. `v0.1.0`).
 /// - `sha`: the 40-character commit SHA that the release tag resolves to.
-/// - `upstream_manifest`: when `Some`, emits an `upstream-manifest:` input line;
-///   when `None`, emits a commented-out placeholder instead.
+/// - `upstream_manifest`: when `Some`, emits active `upstream-manifest:` input
+///   and `--upstream-manifest` CLI arg; when `None`, emits commented-out
+///   placeholders.
 #[must_use]
 pub fn render(version: &str, sha: &str, upstream_manifest: Option<&str>) -> String {
-    let upstream_line = upstream_manifest.map_or_else(
+    let (upstream_line, upstream_arg_line) = upstream_manifest.map_or_else(
         || {
-            String::from(
+            let line = String::from(
                 "          # upstream-manifest: owner/repo@main:.github/gh-sync/config.yaml",
-            )
+            );
+            let arg = String::new();
+            (line, arg)
         },
-        |v| format!("          upstream-manifest: {v}"),
+        |v| {
+            let line = format!("          upstream-manifest: {v}");
+            let arg = format!(" \\\n            --upstream-manifest {v}");
+            (line, arg)
+        },
     );
     TEMPLATE
         .replace("{{version}}", version)
         .replace("{{sha}}", sha)
         .replace("{{upstream_manifest_line}}", &upstream_line)
+        .replace("{{upstream_manifest_arg_line}}", &upstream_arg_line)
 }
 
 /// Write pre-rendered `content` to `path`, creating parent directories as needed.
@@ -129,40 +137,47 @@ mod tests {
         assert!(out.contains("name: gh-sync"), "wrong workflow name");
         assert!(out.contains("actions/checkout@"), "missing checkout step");
         assert!(out.contains("secrets.GITHUB_TOKEN"), "missing token ref");
-        assert!(out.contains("contents: write"), "missing contents: write");
+        assert!(out.contains("contents: read"), "missing contents: read");
+        assert!(out.contains("issues: write"), "missing issues: write");
         assert!(
-            out.contains("pull-requests: write"),
-            "missing pull-requests: write"
+            out.contains("install-only: \"true\""),
+            "missing install-only input"
         );
         assert!(
-            out.contains("apply-files: \"true\""),
-            "missing apply-files input"
+            out.contains("gh-sync issue-sync"),
+            "missing gh-sync issue-sync step"
         );
         assert!(
-            out.contains("version: v0.1.0"),
-            "missing explicit version input"
+            !out.contains("version:"),
+            "version: input must not appear (Renovate handles uses: line)"
         );
-        assert!(out.contains("gh-sync pr"), "missing gh-sync pr step");
+        assert!(
+            !out.contains("apply-files:"),
+            "apply-files: must not appear in new template"
+        );
+        assert!(!out.contains("gh-sync pr"), "gh-sync pr must not appear");
     }
 
     #[test]
-    fn render_triggers_are_schedule_and_dispatch_only() {
+    fn render_triggers_include_push_to_main() {
         let out = render("v0.1.0", TEST_SHA, None);
         assert!(out.contains("schedule:"), "missing schedule trigger");
         assert!(
             out.contains("workflow_dispatch:"),
             "missing workflow_dispatch trigger"
         );
-        // push and pull_request triggers must not appear
+        assert!(
+            out.contains("push:") && out.contains("branches: [main]"),
+            "push: branches: [main] trigger missing"
+        );
         assert!(
             !out.contains("pull_request:"),
             "pull_request trigger must not appear"
         );
-        assert!(!out.contains("push:"), "push trigger must not appear");
     }
 
     #[test]
-    fn render_with_upstream_manifest_emits_active_line() {
+    fn render_with_upstream_manifest_emits_active_line_and_arg() {
         let out = render(
             "v0.1.0",
             TEST_SHA,
@@ -170,20 +185,32 @@ mod tests {
         );
         assert!(
             out.contains("upstream-manifest: owner/repo@main:.github/gh-sync/config.yaml"),
-            "missing upstream-manifest line: {out}"
+            "missing upstream-manifest input line: {out}"
+        );
+        assert!(
+            out.contains("--upstream-manifest owner/repo@main:.github/gh-sync/config.yaml"),
+            "missing --upstream-manifest CLI arg: {out}"
         );
         assert!(
             !out.contains("{{upstream_manifest_line}}"),
             "placeholder not replaced: {out}"
         );
+        assert!(
+            !out.contains("{{upstream_manifest_arg_line}}"),
+            "arg placeholder not replaced: {out}"
+        );
     }
 
     #[test]
-    fn render_without_upstream_manifest_emits_comment() {
+    fn render_without_upstream_manifest_emits_comment_and_no_arg() {
         let out = render("v0.1.0", TEST_SHA, None);
         assert!(
             out.contains("# upstream-manifest: owner/repo@main:.github/gh-sync/config.yaml"),
             "missing comment placeholder: {out}"
+        );
+        assert!(
+            !out.contains("--upstream-manifest"),
+            "unexpected --upstream-manifest arg when manifest is None: {out}"
         );
         assert!(
             !out.contains("{{upstream_manifest_line}}"),

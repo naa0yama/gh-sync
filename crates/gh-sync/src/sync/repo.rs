@@ -709,6 +709,50 @@ fn execute_inner(
     ExitCode::FAILURE
 }
 
+// ---------------------------------------------------------------------------
+// Structured ci-check API (used by issue-sync)
+// ---------------------------------------------------------------------------
+
+/// Structured report from a repo settings drift check.
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug)]
+pub struct RepoCiCheckReport {
+    /// `true` when at least one setting differs from the desired spec.
+    pub has_actions: bool,
+    /// Human-readable preview text captured from [`print_preview`].
+    pub preview_text: String,
+}
+
+/// Check repo settings drift and return a structured report.
+///
+/// Detects the current repository from the `gh` CLI via `client`, compares
+/// the live settings against `spec`, and captures the formatted preview.
+///
+/// # Errors
+///
+/// Returns an error when the repo cannot be detected or the API call fails.
+pub fn ci_check_structured(
+    spec: &Spec,
+    client: &dyn GhRepoClient,
+) -> anyhow::Result<RepoCiCheckReport> {
+    let repo = client
+        .detect_repo()
+        .map_err(|e| anyhow::anyhow!("failed to detect repository: {e}"))?;
+
+    let changes = compare(spec, &repo, client)
+        .map_err(|e| anyhow::anyhow!("failed to fetch repository state: {e}"))?;
+
+    let mut buf: Vec<u8> = Vec::new();
+    let (_, has_actions) = print_preview(&mut buf, &changes, &repo)
+        .map_err(|e| anyhow::anyhow!("failed to format preview: {e}"))?;
+
+    let preview_text = String::from_utf8_lossy(&buf).into_owned();
+    Ok(RepoCiCheckReport {
+        has_actions,
+        preview_text,
+    })
+}
+
 fn run_apply(
     changes: &[SpecChange],
     spec: &Spec,

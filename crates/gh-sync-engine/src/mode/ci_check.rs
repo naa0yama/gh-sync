@@ -8,34 +8,48 @@ use gh_sync_manifest::{self as manifest, Manifest, Rule, Strategy};
 
 use crate::diff::unified_diff;
 use crate::output::{
-    DriftOutcome, StatusTag, Summary, build_diff_context_header, build_pr_comment, emit_diff,
-    emit_drift_summary, emit_gha_annotations, emit_status,
+    DriftOutcome, DriftSummary, StatusTag, Summary, build_diff_context_header, build_pr_comment,
+    emit_diff, emit_drift_summary, emit_gha_annotations, emit_status,
 };
 use crate::strategy::patch::PatchRunner;
 use crate::strategy::{self, StrategyResult};
 use crate::upstream::{FetchResult, UpstreamFetcher};
 
-/// Run drift-detection mode.
+/// Structured report returned by [`run_structured`].
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug)]
+pub struct CiCheckReport<'a> {
+    /// Per-rule drift outcomes (borrows rules from the manifest).
+    pub drift_outcomes: Vec<DriftOutcome<'a>>,
+    /// Aggregated drift summary counts.
+    pub summary: DriftSummary,
+    /// `true` when at least one rule encountered a fetch / patch error.
+    pub has_error: bool,
+}
+
+impl CiCheckReport<'_> {
+    /// Returns `true` when there is any drift or error.
+    #[must_use]
+    pub const fn has_any_drift(&self) -> bool {
+        self.summary.drifted > 0 || self.has_error
+    }
+}
+
+/// Collect drift outcomes for all rules and return them as a structured report.
 ///
-/// Each rule is evaluated without writing any files.  When the local state
-/// diverges from the expected state, the rule is marked as drifted.
-///
-/// If `GITHUB_ACTIONS=true`, GitHub Actions annotations are written to `w`.
-/// If the run is also associated with a PR (`GITHUB_REF` matches
-/// `refs/pull/*/merge`), a comment body is posted via `gh pr comment`.
-///
-/// Returns `ExitCode::FAILURE` when any drift, conflict, or error is found.
+/// Unlike [`run`], this function does **not** emit GHA annotations or post
+/// a PR comment — the caller is responsible for acting on the report.
 ///
 /// # Errors
 /// Propagates I/O errors from `w`.
-pub fn run(
-    manifest: &Manifest,
+pub fn run_structured<'a>(
+    manifest: &'a Manifest,
     repo_root: &Path,
     fetcher: &dyn UpstreamFetcher,
     patch_runner: &dyn PatchRunner,
     w: &mut dyn Write,
-) -> std::io::Result<ExitCode> {
-    let mut drift_outcomes: Vec<DriftOutcome<'_>> = Vec::new();
+) -> std::io::Result<CiCheckReport<'a>> {
+    let mut drift_outcomes: Vec<DriftOutcome<'a>> = Vec::new();
     let mut has_error = false;
 
     for rule in &manifest.files {
@@ -79,18 +93,45 @@ pub fn run(
         });
     }
 
-    // Summary footer
-    let ds = Summary::from_drift_outcomes(&drift_outcomes);
-    emit_drift_summary(w, &ds)?;
+    let summary = Summary::from_drift_outcomes(&drift_outcomes);
+    emit_drift_summary(w, &summary)?;
+
+    Ok(CiCheckReport {
+        drift_outcomes,
+        summary,
+        has_error,
+    })
+}
+
+/// Run drift-detection mode.
+///
+/// Each rule is evaluated without writing any files.  When the local state
+/// diverges from the expected state, the rule is marked as drifted.
+///
+/// If `GITHUB_ACTIONS=true`, GitHub Actions annotations are written to `w`.
+/// If the run is also associated with a PR (`GITHUB_REF` matches
+/// `refs/pull/*/merge`), a comment body is posted via `gh pr comment`.
+///
+/// Returns `ExitCode::FAILURE` when any drift, conflict, or error is found.
+///
+/// # Errors
+/// Propagates I/O errors from `w`.
+pub fn run(
+    manifest: &Manifest,
+    repo_root: &Path,
+    fetcher: &dyn UpstreamFetcher,
+    patch_runner: &dyn PatchRunner,
+    w: &mut dyn Write,
+) -> std::io::Result<ExitCode> {
+    let report = run_structured(manifest, repo_root, fetcher, patch_runner, w)?;
 
     // GHA annotations (when running in GitHub Actions)
     if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true") {
-        emit_gha_annotations(w, &drift_outcomes)?;
-        maybe_post_pr_comment(&drift_outcomes);
+        emit_gha_annotations(w, &report.drift_outcomes)?;
+        maybe_post_pr_comment(&report.drift_outcomes);
     }
 
-    let any_drift = ds.drifted > 0;
-    Ok(if any_drift || has_error {
+    Ok(if report.has_any_drift() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

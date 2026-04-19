@@ -33,7 +33,13 @@ inputs:
     description: >
       When true, run `sync file -y` to apply file changes instead of
       drift-checking. Repo settings are not checked in this mode.
-      Combine with a `gh-sync pr` step to create a pull request automatically.
+    required: false
+    default: "false"
+  install-only:
+    description: >
+      When true, only install the gh-sync binary and prepend it to PATH.
+      Skip manifest validation, drift checks, and apply-files. Useful when
+      you want to invoke gh-sync subcommands directly from subsequent steps.
     required: false
     default: "false"
 
@@ -58,11 +64,33 @@ runs:
         esac
         echo "triple=${TRIPLE}" >> "$GITHUB_OUTPUT"
 
-    - name: Download gh-sync binary
+    - name: Resolve release tag
+      id: resolve_tag
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
         VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # When SHA-pinned, github.action_ref is a commit SHA, not a tag.
+        # gh release download needs a tag, so reverse-lookup via tags API.
+        if [[ "${VERSION}" =~ ^[0-9a-f]{40}$ ]]; then
+          TAG=$(gh api repos/naa0yama/gh-sync/tags --paginate \
+            --jq ".[] | select(.commit.sha==\"${VERSION}\") | .name" \
+            | head -n 1)
+          if [[ -z "${TAG}" ]]; then
+            echo "::error::no release tag matches SHA ${VERSION}"
+            exit 1
+          fi
+          VERSION="${TAG}"
+        fi
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+    - name: Download gh-sync binary
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        VERSION: ${{ steps.resolve_tag.outputs.version }}
         TRIPLE: ${{ steps.target.outputs.triple }}
       run: | # zizmor: ignore[github-env] BIN_DIR derives from RUNNER_TEMP (trusted runner var)
         set -euo pipefail
@@ -106,6 +134,7 @@ runs:
         echo "${BIN_DIR}" >> "$GITHUB_PATH"
 
     - name: Validate manifest
+      if: inputs.install-only != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -120,7 +149,7 @@ runs:
         gh-sync sync file "${ARGS[@]}"
 
     - name: Drift check — repo settings
-      if: inputs.apply-files != 'true'
+      if: inputs.install-only != 'true' && inputs.apply-files != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -135,7 +164,7 @@ runs:
         gh-sync sync repo "${ARGS[@]}"
 
     - name: Drift check — files
-      if: inputs.apply-files != 'true'
+      if: inputs.install-only != 'true' && inputs.apply-files != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -150,7 +179,7 @@ runs:
         gh-sync sync file "${ARGS[@]}"
 
     - name: Apply file sync
-      if: inputs.apply-files == 'true'
+      if: inputs.install-only != 'true' && inputs.apply-files == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
