@@ -305,17 +305,31 @@ fn run_upstream(
     std::fs::write(output, &content)
         .with_context(|| format!("failed to write '{}'", output.display()))?;
 
-    schema::write_schema_file(output_dir)
+    let schema_outcome = schema::write_schema_file(output_dir)
         .with_context(|| format!("failed to write schema.json to '{}'", output_dir.display()))?;
 
     let mut stdout = io::stdout();
     writeln!(stdout, "[OK] created '{}'", output.display()).context("failed to write to stdout")?;
-    writeln!(
-        stdout,
-        "[OK] created '{}/schema.json'",
-        output_dir.display()
-    )
-    .context("failed to write to stdout")?;
+    match schema_outcome {
+        schema::WriteOutcome::Created => writeln!(
+            stdout,
+            "[OK] created '{}/schema.json'",
+            output_dir.display()
+        )
+        .context("failed to write to stdout")?,
+        schema::WriteOutcome::Updated => writeln!(
+            stdout,
+            "[OK] updated '{}/schema.json'",
+            output_dir.display()
+        )
+        .context("failed to write to stdout")?,
+        schema::WriteOutcome::Unchanged => writeln!(
+            stdout,
+            "'{}/schema.json' is already up to date.",
+            output_dir.display()
+        )
+        .context("failed to write to stdout")?,
+    }
 
     Ok(())
 }
