@@ -1,5 +1,7 @@
 /// CLI argument definitions for the `sync` subcommand
 pub mod cli;
+/// Auto-detection of the fork / template parent repository
+pub mod detect;
 /// Unified diff generation via the `diff` CLI
 pub mod diff;
 /// Error types for manifest validation and sync operations
@@ -25,6 +27,7 @@ use std::io::{self, IsTerminal as _};
 use std::process::ExitCode;
 
 use crate::sync::cli::SyncCommand;
+use crate::sync::runner::SystemGhRunner;
 use crate::sync::strategy::patch::RealPatchRunner;
 use crate::sync::upstream::GhFetcher;
 
@@ -39,6 +42,7 @@ pub fn execute(args: &cli::SyncArgs) -> ExitCode {
 
 /// Execute `sync file` — fetch upstream files, preview, then apply on confirmation.
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[allow(clippy::too_many_lines)]
 fn execute_file(args: &cli::SyncFileArgs) -> ExitCode {
     let mut stdout = io::stdout();
 
@@ -61,21 +65,28 @@ fn execute_file(args: &cli::SyncFileArgs) -> ExitCode {
         };
     }
 
+    // Detect fork/template parent and ask the user if they want to use it as
+    // the upstream manifest, unless --upstream-manifest is already specified.
+    let runner = SystemGhRunner;
+    let effective_upstream = detect::resolve_effective_upstream(
+        args.upstream_manifest.as_deref(),
+        args.yes || args.ci_check || args.dry_run || args.patch_refresh,
+        &args.manifest,
+        &runner,
+    );
+
     // Resolve the effective manifest (upstream fetch + optional local overlay,
     // or just local file when --upstream-manifest is not given).
     let fetcher = GhFetcher;
-    let manifest = match upstream_manifest::resolve(
-        args.upstream_manifest.as_deref(),
-        &args.manifest,
-        &fetcher,
-    ) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::error!("failed to resolve manifest: {e:#}");
-            tracing::info!("hint: run `gh-sync init` to create a configuration file");
-            return ExitCode::FAILURE;
-        }
-    };
+    let manifest =
+        match upstream_manifest::resolve(effective_upstream.as_deref(), &args.manifest, &fetcher) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!("failed to resolve manifest: {e:#}");
+                tracing::info!("hint: run `gh-sync init` to create a configuration file");
+                return ExitCode::FAILURE;
+            }
+        };
 
     // --validate with --upstream-manifest: validate the merged manifest.
     if args.validate {

@@ -1074,8 +1074,17 @@ naa0yama/boilerplate-rust:.github/gh-sync/config.yaml  # ref 省略 → HEAD
    - 指定された参照を `gh api` で取得し、YAML をパースする
    - `--manifest` に指定されたローカルファイルが存在すれば、`merge_overlay` を適用する
    - ローカルファイルが存在しない場合は upstream マニフェストをそのまま使用する
-2. `--upstream-manifest` が指定されない場合:
-   - 従来どおり `--manifest` のローカルファイルのみを使用する
+2. `--upstream-manifest` が指定されない場合 (自動検出):
+   - TTY 環境かつ `--yes` なし: `gh api repos/{owner}/{repo}` で fork 親または
+     テンプレート親を自動検出し、使用するか確認プロンプトを表示する
+   - ユーザーが承諾した場合: 検出した `owner/repo@branch:manifest-path` を
+     upstream マニフェストとして使用する (上記 1 と同じ流れ)
+   - 非 TTY / `--yes` 指定 / 検出失敗 / ユーザー拒否: ローカルファイルのみを使用する
+
+**自動検出の優先順位**: fork 親 (`parent` フィールド) > テンプレート親 (`template_repository`)
+
+**高速パス**: GitHub Actions 環境では `GITHUB_REPOSITORY` 環境変数を参照し、
+`gh repo view` の呼び出しを省略する。
 
 ### 12.4 マージ規則
 

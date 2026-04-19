@@ -174,6 +174,7 @@ mise run pre-commit       # clean:sweep + fmt:check + clippy:strict + ast-grep +
 │       ├── src/
 │       │   ├── main.rs         # アプリケーションのエントリーポイント
 │       │   ├── sync/           # テンプレート同期サブコマンド
+│       │   │   ├── detect.rs   # fork/template 親リポジトリの自動検出
 │       │   │   └── runner.rs   # GhRunner トレイト (gh CLI 呼び出し抽象化)
 │       │   └── init/           # init サブコマンド
 │       ├── tests/
