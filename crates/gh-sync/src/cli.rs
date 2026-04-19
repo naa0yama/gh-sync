@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::init::cli::InitArgs;
-use crate::pr::cli::PrArgs;
+use crate::issue_sync::cli::IssueSyncArgs;
 use crate::sync::cli::SyncArgs;
 
 /// gh-sync CLI for pulling upstream files into downstream repos.
@@ -19,6 +19,6 @@ pub enum Commands {
     Sync(SyncArgs),
     /// Initialize a gh-sync configuration file
     Init(InitArgs),
-    /// Create a signed commit and pull request from local working-tree changes
-    Pr(PrArgs),
+    /// Detect upstream drift and manage a tracking GitHub Issue
+    IssueSync(IssueSyncArgs),
 }

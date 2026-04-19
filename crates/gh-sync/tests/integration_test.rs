@@ -149,13 +149,13 @@ fn test_cli_version_short_flag() {
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn test_cli_pr_help() {
+fn test_cli_issue_sync_help() {
     let mut cmd = cargo_bin_cmd!("gh-sync");
-    cmd.args(["pr", "--help"])
+    cmd.args(["issue-sync", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("title"))
-        .stdout(predicate::str::contains("branch"));
+        .stdout(predicate::str::contains("manifest"))
+        .stdout(predicate::str::contains("label"));
 }
 
 #[test]
