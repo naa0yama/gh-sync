@@ -1,7 +1,9 @@
 # Changelog
 
 ## [v0.3.4](https://github.com/naa0yama/gh-sync/compare/v0.3.3...v0.3.4) - 2026-04-20
+
 ### Bug Fixes 🐌
+
 - fix(sync): prevent HTTP 422 and make all gh errors fully diagnosable by @naa0yama in https://github.com/naa0yama/gh-sync/pull/58
 
 ## [v0.3.3](https://github.com/naa0yama/gh-sync/compare/v0.3.2...v0.3.3) - 2026-04-19
