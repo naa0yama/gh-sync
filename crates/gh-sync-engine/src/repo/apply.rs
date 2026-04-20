@@ -96,12 +96,28 @@ fn apply_core_fields(
     }
 
     // GitHub API rejects merge-method title/message fields when the method is
-    // disabled. Strip them when the same PATCH disables the method.
-    if patch.get("allow_merge_commit") == Some(&serde_json::json!(false)) {
+    // disabled. Strip them unless the PATCH is explicitly enabling the method
+    // or the spec declares it enabled. Treat None as "do not risk a 422".
+    let merge_enabled = patch.get("allow_merge_commit") == Some(&serde_json::json!(true))
+        || (patch.get("allow_merge_commit").is_none()
+            && spec
+                .merge_strategy
+                .as_ref()
+                .and_then(|m| m.allow_merge_commit)
+                == Some(true));
+    if !merge_enabled {
         patch.remove("merge_commit_title");
         patch.remove("merge_commit_message");
     }
-    if patch.get("allow_squash_merge") == Some(&serde_json::json!(false)) {
+
+    let squash_enabled = patch.get("allow_squash_merge") == Some(&serde_json::json!(true))
+        || (patch.get("allow_squash_merge").is_none()
+            && spec
+                .merge_strategy
+                .as_ref()
+                .and_then(|m| m.allow_squash_merge)
+                == Some(true));
+    if !squash_enabled {
         patch.remove("squash_merge_commit_title");
         patch.remove("squash_merge_commit_message");
     }

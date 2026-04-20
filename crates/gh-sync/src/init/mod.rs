@@ -205,7 +205,7 @@ fn confirm_overwrite_with_diff(
 /// Writes files appropriate to the selected mode (upstream or downstream).
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn execute(args: &InitArgs) -> ExitCode {
-    match run(args, &GhFetcher, &SystemGhRunner) {
+    match run(args, &GhFetcher::new(), &SystemGhRunner) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             tracing::error!("init failed: {e:#}");

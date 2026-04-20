@@ -247,3 +247,5 @@ OpenObserve Enterprise Edition は [EULA (End User License Agreement)](https://o
 ```bash
 RUST_LOG=trace RUST_BACKTRACE=1 cargo run -- sync --help
 ```
+
+`RUST_LOG=gh_sync=debug` 以上でログを有効にすると、`GH_DEBUG=api` が `gh` CLI に自動伝搬され、GitHub API の HTTP リクエスト/レスポンスが stderr に出力されます。

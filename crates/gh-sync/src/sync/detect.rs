@@ -7,7 +7,7 @@
 
 use anyhow::Context as _;
 
-use crate::sync::runner::GhRunner;
+use crate::sync::runner::{GhRunner, run_checked};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -88,26 +88,19 @@ pub fn detect_current_repo(runner: &dyn GhRunner) -> anyhow::Result<String> {
         return Ok(v);
     }
 
-    let out = runner
-        .run(
-            &[
-                "repo",
-                "view",
-                "--json",
-                "nameWithOwner",
-                "--jq",
-                ".nameWithOwner",
-            ],
-            None,
-        )
-        .context("failed to spawn `gh repo view`")?;
-
-    if !out.success() {
-        anyhow::bail!(
-            "`gh repo view` failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
+    let out = run_checked(
+        runner,
+        &[
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "--jq",
+            ".nameWithOwner",
+        ],
+        None,
+        "gh repo view",
+    )?;
 
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
@@ -127,14 +120,7 @@ pub fn detect_upstream_parent(
     current_repo: &str,
 ) -> anyhow::Result<Option<UpstreamParent>> {
     let url = format!("repos/{current_repo}");
-    let out = runner
-        .run(&["api", &url], None)
-        .context("failed to spawn `gh api`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("`gh api {url}` failed: {stderr}");
-    }
+    let out = run_checked(runner, &["api", &url], None, &format!("GET {url}"))?;
 
     let meta: RepoMeta =
         serde_json::from_slice(&out.stdout).context("failed to parse repository metadata JSON")?;

@@ -12,7 +12,7 @@ use gh_sync_engine::output::build_pr_comment;
 
 use crate::sync::manifest;
 use crate::sync::repo::{GhRepoClientImpl, RepoCiCheckReport, ci_check_structured};
-use crate::sync::runner::{GhRunner, SystemGhRunner};
+use crate::sync::runner::{GhRunner, SystemGhRunner, run_checked};
 use crate::sync::strategy::patch::RealPatchRunner;
 use crate::sync::upstream::GhFetcher;
 use crate::sync::upstream_manifest;
@@ -55,7 +55,7 @@ pub fn execute(args: &IssueSyncArgs) -> ExitCode {
 /// irrecoverably, or any `gh` CLI call fails.
 pub fn run(args: &IssueSyncArgs, runner: &dyn GhRunner) -> anyhow::Result<bool> {
     let repo_root = Path::new(".");
-    let fetcher = GhFetcher;
+    let fetcher = GhFetcher::new();
     let patch_runner = RealPatchRunner;
 
     // Resolve the effective manifest.
@@ -204,27 +204,19 @@ fn resolve_repo(arg_repo: Option<&str>, runner: &dyn GhRunner) -> anyhow::Result
         return Ok(env_repo);
     }
 
-    let out = runner
-        .run(
-            &[
-                "repo",
-                "view",
-                "--json",
-                "nameWithOwner",
-                "--jq",
-                ".nameWithOwner",
-            ],
-            None,
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!(
-            "failed to detect repository via `gh repo view`: {stderr}\n\
-             Use --repo owner/repo to specify it explicitly."
-        );
-    }
+    let out = run_checked(
+        runner,
+        &[
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "--jq",
+            ".nameWithOwner",
+        ],
+        None,
+        "gh repo view",
+    )?;
 
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
@@ -237,20 +229,15 @@ fn resolve_repo(arg_repo: Option<&str>, runner: &dyn GhRunner) -> anyhow::Result
 ///
 /// Returns `None` when no matching open issue exists.
 fn find_open_issue(repo: &str, label: &str, runner: &dyn GhRunner) -> anyhow::Result<Option<u64>> {
-    let out = runner
-        .run(
-            &[
-                "issue", "list", "--repo", repo, "--label", label, "--state", "open", "--json",
-                "number", "--limit", "10",
-            ],
-            None,
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh issue list failed: {stderr}");
-    }
+    let out = run_checked(
+        runner,
+        &[
+            "issue", "list", "--repo", repo, "--label", label, "--state", "open", "--json",
+            "number", "--limit", "10",
+        ],
+        None,
+        &format!("gh issue list --repo {repo}"),
+    )?;
 
     let json: serde_json::Value =
         serde_json::from_slice(&out.stdout).context("failed to parse gh issue list JSON")?;
@@ -265,50 +252,40 @@ fn find_open_issue(repo: &str, label: &str, runner: &dyn GhRunner) -> anyhow::Re
 
 /// Edit the body of an existing issue.
 fn edit_issue(runner: &dyn GhRunner, repo: &str, number: u64, body: &str) -> anyhow::Result<()> {
-    let out = runner
-        .run(
-            &[
-                "issue",
-                "edit",
-                &number.to_string(),
-                "--repo",
-                repo,
-                "--body-file",
-                "-",
-            ],
-            Some(body.as_bytes()),
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh issue edit failed: {stderr}");
-    }
+    run_checked(
+        runner,
+        &[
+            "issue",
+            "edit",
+            &number.to_string(),
+            "--repo",
+            repo,
+            "--body-file",
+            "-",
+        ],
+        Some(body.as_bytes()),
+        &format!("gh issue edit #{number} --repo {repo}"),
+    )?;
     Ok(())
 }
 
 /// Ensure a label exists in `repo` (idempotent via `--force`).
 fn ensure_label(runner: &dyn GhRunner, repo: &str, label: &str) -> anyhow::Result<()> {
-    let out = runner
-        .run(
-            &[
-                "label",
-                "create",
-                label,
-                "--repo",
-                repo,
-                "--force",
-                "--description",
-                "Upstream drift detected by gh-sync",
-            ],
-            None,
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh label create failed: {stderr}");
-    }
+    run_checked(
+        runner,
+        &[
+            "label",
+            "create",
+            label,
+            "--repo",
+            repo,
+            "--force",
+            "--description",
+            "Upstream drift detected by gh-sync",
+        ],
+        None,
+        &format!("gh label create {label} --repo {repo}"),
+    )?;
     Ok(())
 }
 
@@ -320,28 +297,23 @@ fn create_issue(
     title: &str,
     body: &str,
 ) -> anyhow::Result<()> {
-    let out = runner
-        .run(
-            &[
-                "issue",
-                "create",
-                "--repo",
-                repo,
-                "--label",
-                label,
-                "--title",
-                title,
-                "--body-file",
-                "-",
-            ],
-            Some(body.as_bytes()),
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh issue create failed: {stderr}");
-    }
+    let out = run_checked(
+        runner,
+        &[
+            "issue",
+            "create",
+            "--repo",
+            repo,
+            "--label",
+            label,
+            "--title",
+            title,
+            "--body-file",
+            "-",
+        ],
+        Some(body.as_bytes()),
+        &format!("gh issue create --repo {repo}"),
+    )?;
 
     let url = String::from_utf8_lossy(&out.stdout).trim().to_owned();
     let mut stdout = io::stdout();
@@ -354,38 +326,28 @@ fn close_issue(runner: &dyn GhRunner, repo: &str, number: u64) -> anyhow::Result
     // Comment first.
     let sha = std::env::var("GITHUB_SHA").unwrap_or_else(|_| String::from("(unknown)"));
     let comment_body = format!("Drift resolved at {sha}.");
-    let out = runner
-        .run(
-            &[
-                "issue",
-                "comment",
-                &number.to_string(),
-                "--repo",
-                repo,
-                "--body",
-                &comment_body,
-            ],
-            None,
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh issue comment failed: {stderr}");
-    }
+    run_checked(
+        runner,
+        &[
+            "issue",
+            "comment",
+            &number.to_string(),
+            "--repo",
+            repo,
+            "--body",
+            &comment_body,
+        ],
+        None,
+        &format!("gh issue comment #{number} --repo {repo}"),
+    )?;
 
     // Then close.
-    let out = runner
-        .run(
-            &["issue", "close", &number.to_string(), "--repo", repo],
-            None,
-        )
-        .context("failed to spawn `gh`")?;
-
-    if !out.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("gh issue close failed: {stderr}");
-    }
+    run_checked(
+        runner,
+        &["issue", "close", &number.to_string(), "--repo", repo],
+        None,
+        &format!("gh issue close #{number} --repo {repo}"),
+    )?;
 
     let mut stdout = io::stdout();
     let _ = writeln!(stdout, "[OK] drift issue #{number} closed");

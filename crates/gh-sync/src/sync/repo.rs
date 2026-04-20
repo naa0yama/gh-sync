@@ -18,8 +18,9 @@ pub use gh_sync_engine::repo::{
 use gh_sync_manifest::Spec;
 
 use crate::sync::detect;
+use crate::sync::gh_error;
 use crate::sync::manifest;
-use crate::sync::runner::{GhRunner, SystemGhRunner};
+use crate::sync::runner::{GhRunner, SystemGhRunner, run_checked};
 use crate::sync::upstream::GhFetcher;
 use crate::sync::upstream_manifest;
 
@@ -59,16 +60,7 @@ impl Default for GhRepoClientImpl<SystemGhRunner> {
 impl<R: GhRunner> GhRepoClientImpl<R> {
     /// `gh api <url>` → raw bytes.
     fn gh_api_get(&self, url: &str) -> anyhow::Result<Vec<u8>> {
-        let out = self
-            .runner
-            .run(&["api", url], None)
-            .with_context(|| format!("failed to spawn `gh api {url}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh api GET {url}` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        let out = run_checked(&self.runner, &["api", url], None, &format!("GET {url}"))?;
         Ok(out.stdout)
     }
 
@@ -87,19 +79,12 @@ impl<R: GhRunner> GhRepoClientImpl<R> {
         body: &serde_json::Value,
     ) -> anyhow::Result<()> {
         let json = serde_json::to_string(body).context("failed to serialize body")?;
-        let out = self
-            .runner
-            .run(
-                &["api", "-X", method, url, "--input", "-"],
-                Some(json.as_bytes()),
-            )
-            .with_context(|| format!("failed to spawn `gh api {method} {url}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh api {method} {url}` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &["api", "-X", method, url, "--input", "-"],
+            Some(json.as_bytes()),
+            &format!("{method} {url}"),
+        )?;
         Ok(())
     }
 }
@@ -110,26 +95,19 @@ impl<R: GhRunner> GhRepoClientImpl<R> {
 
 impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
     fn detect_repo(&self) -> anyhow::Result<String> {
-        let out = self
-            .runner
-            .run(
-                &[
-                    "repo",
-                    "view",
-                    "--json",
-                    "nameWithOwner",
-                    "-q",
-                    ".nameWithOwner",
-                ],
-                None,
-            )
-            .context("failed to spawn `gh repo view`")?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh repo view` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        let out = run_checked(
+            &self.runner,
+            &[
+                "repo",
+                "view",
+                "--json",
+                "nameWithOwner",
+                "-q",
+                ".nameWithOwner",
+            ],
+            None,
+            "gh repo view",
+        )?;
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
     }
 
@@ -151,28 +129,21 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
     }
 
     fn fetch_labels(&self, repo: &str) -> anyhow::Result<Vec<ApiLabel>> {
-        let out = self
-            .runner
-            .run(
-                &[
-                    "label",
-                    "list",
-                    "--repo",
-                    repo,
-                    "--limit",
-                    "1000",
-                    "--json",
-                    "name,color,description",
-                ],
-                None,
-            )
-            .with_context(|| format!("failed to spawn `gh label list --repo {repo}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh label list` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        let out = run_checked(
+            &self.runner,
+            &[
+                "label",
+                "list",
+                "--repo",
+                repo,
+                "--limit",
+                "1000",
+                "--json",
+                "name,color,description",
+            ],
+            None,
+            &format!("gh label list --repo {repo}"),
+        )?;
         let items: Vec<serde_json::Value> =
             serde_json::from_slice(&out.stdout).context("failed to parse labels JSON")?;
         Ok(items
@@ -262,33 +233,34 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
         repo: &str,
         branch: &str,
     ) -> anyhow::Result<Option<BranchProtectionApi>> {
-        let out = self
-            .runner
-            .run(
-                &["api", &format!("repos/{repo}/branches/{branch}/protection")],
-                None,
-            )
-            .with_context(|| {
-                format!("failed to spawn `gh api` for branch protection {repo}/{branch}")
-            })?;
-        if out.exit_code == Some(1) {
-            let body = String::from_utf8_lossy(&out.stderr);
-            if body.contains("404") || body.contains(BRANCH_NOT_PROTECTED) {
+        let op = format!("GET repos/{repo}/branches/{branch}/protection");
+        let out = self.runner.run(
+            &["api", &format!("repos/{repo}/branches/{branch}/protection")],
+            None,
+        )?;
+        if !out.success() {
+            let api_err = gh_error::parse_from_streams(&out.stdout, &out.stderr);
+            let status = api_err.as_ref().and_then(|e| e.status);
+            let stderr_str = String::from_utf8_lossy(&out.stderr);
+            // 2-stage: API status first, string fallback.
+            if status == Some(404)
+                || (status.is_none()
+                    && (stderr_str.contains("404") || stderr_str.contains(BRANCH_NOT_PROTECTED)))
+            {
                 return Ok(None);
             }
-        }
-        if !out.success() {
+            // Check stdout JSON for BRANCH_NOT_PROTECTED (existing logic).
             if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout)
                 && v.get("message").and_then(serde_json::Value::as_str)
                     == Some(BRANCH_NOT_PROTECTED)
             {
                 return Ok(None);
             }
-            anyhow::bail!(
-                "`gh api` branch protection failed: {}{}",
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            );
+            let exit_code = out.exit_code;
+            let stdout_str = String::from_utf8_lossy(&out.stdout);
+            tracing::error!(%op, ?exit_code, stderr = %stderr_str, stdout = %stdout_str, ?api_err, "gh command failed");
+            let stderr_summary = gh_error::truncate_tail(&stderr_str, 2048);
+            anyhow::bail!("{op} failed (exit {exit_code:?}): {stderr_summary}");
         }
         let v: serde_json::Value =
             serde_json::from_slice(&out.stdout).context("failed to parse branch protection")?;
@@ -313,17 +285,25 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
     }
 
     fn fetch_release_immutability(&self, repo: &str) -> anyhow::Result<Option<bool>> {
+        let op = format!("GET repos/{repo}/immutable-releases");
         let out = self
             .runner
-            .run(&["api", &format!("repos/{repo}/immutable-releases")], None)
-            .with_context(|| format!("failed to spawn `gh api` for immutable-releases {repo}"))?;
+            .run(&["api", &format!("repos/{repo}/immutable-releases")], None)?;
         if !out.success() {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            // 404/403 means the endpoint is not available (e.g. GHES without support).
-            if stderr.contains("404") || stderr.contains("403") {
+            let api_err = gh_error::parse_from_streams(&out.stdout, &out.stderr);
+            let status = api_err.as_ref().and_then(|e| e.status);
+            let stderr_str = String::from_utf8_lossy(&out.stderr);
+            // 2-stage: 404/403 means endpoint not available (e.g. GHES without support).
+            if matches!(status, Some(404 | 403))
+                || (status.is_none() && (stderr_str.contains("404") || stderr_str.contains("403")))
+            {
                 return Ok(None);
             }
-            anyhow::bail!("`gh api GET immutable-releases` failed: {stderr}");
+            let exit_code = out.exit_code;
+            let stdout_str = String::from_utf8_lossy(&out.stdout);
+            tracing::error!(%op, ?exit_code, stderr = %stderr_str, stdout = %stdout_str, ?api_err, "gh command failed");
+            let stderr_summary = gh_error::truncate_tail(&stderr_str, 2048);
+            anyhow::bail!("{op} failed (exit {exit_code:?}): {stderr_summary}");
         }
         let v: serde_json::Value = serde_json::from_slice(&out.stdout)
             .context("failed to parse immutable-releases JSON")?;
@@ -332,47 +312,44 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
 
     fn put_release_immutability(&self, repo: &str, enabled: bool) -> anyhow::Result<()> {
         let method = if enabled { "PUT" } else { "DELETE" };
-        let out = self
-            .runner
-            .run(
-                &[
-                    "api",
-                    "-X",
-                    method,
-                    &format!("repos/{repo}/immutable-releases"),
-                ],
-                None,
-            )
-            .with_context(|| {
-                format!("failed to spawn `gh api {method} immutable-releases {repo}`")
-            })?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh api {method} immutable-releases` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &[
+                "api",
+                "-X",
+                method,
+                &format!("repos/{repo}/immutable-releases"),
+            ],
+            None,
+            &format!("{method} repos/{repo}/immutable-releases"),
+        )?;
         Ok(())
     }
 
     fn fetch_fork_pr_approval(&self, repo: &str) -> anyhow::Result<Option<String>> {
-        let out = self
-            .runner
-            .run(
-                &[
-                    "api",
-                    &format!("repos/{repo}/actions/permissions/fork-pr-contributor-approval"),
-                ],
-                None,
-            )
-            .with_context(|| format!("failed to spawn `gh api` for fork-pr-approval {repo}"))?;
+        let op = format!("GET repos/{repo}/actions/permissions/fork-pr-contributor-approval");
+        let out = self.runner.run(
+            &[
+                "api",
+                &format!("repos/{repo}/actions/permissions/fork-pr-contributor-approval"),
+            ],
+            None,
+        )?;
         if !out.success() {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            // 404 = user-owned repo, 422 = private repo — both are expected
-            if stderr.contains("404") || stderr.contains("422") {
+            let api_err = gh_error::parse_from_streams(&out.stdout, &out.stderr);
+            let status = api_err.as_ref().and_then(|e| e.status);
+            let stderr_str = String::from_utf8_lossy(&out.stderr);
+            // 2-stage: 404 = user-owned repo, 422 = private repo — both are expected.
+            if matches!(status, Some(404 | 422))
+                || (status.is_none() && (stderr_str.contains("404") || stderr_str.contains("422")))
+            {
                 return Ok(None);
             }
-            anyhow::bail!("`gh api GET fork-pr-contributor-approval` failed: {stderr}");
+            let exit_code = out.exit_code;
+            let stdout_str = String::from_utf8_lossy(&out.stdout);
+            tracing::error!(%op, ?exit_code, stderr = %stderr_str, stdout = %stdout_str, ?api_err, "gh command failed");
+            let stderr_summary = gh_error::truncate_tail(&stderr_str, 2048);
+            anyhow::bail!("{op} failed (exit {exit_code:?}): {stderr_summary}");
         }
         let v: serde_json::Value = serde_json::from_slice(&out.stdout)
             .context("failed to parse fork-pr-contributor-approval JSON")?;
@@ -410,16 +387,12 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
         if let Some(desc) = description {
             args.extend_from_slice(&["--description", desc]);
         }
-        let out = self
-            .runner
-            .run(&args, None)
-            .with_context(|| format!("failed to spawn `gh label create {name} --repo {repo}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh label create` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &args,
+            None,
+            &format!("gh label create {name} --repo {repo}"),
+        )?;
         Ok(())
     }
 
@@ -434,33 +407,22 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
         if let Some(desc) = description {
             args.extend_from_slice(&["--description", desc]);
         }
-        let out = self
-            .runner
-            .run(&args, None)
-            .with_context(|| format!("failed to spawn `gh label edit {name} --repo {repo}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh label edit` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &args,
+            None,
+            &format!("gh label edit {name} --repo {repo}"),
+        )?;
         Ok(())
     }
 
     fn delete_label(&self, repo: &str, name: &str) -> anyhow::Result<()> {
-        let out = self
-            .runner
-            .run(
-                &["label", "delete", name, "--repo", repo, "--confirm"],
-                None,
-            )
-            .with_context(|| format!("failed to spawn `gh label delete {name} --repo {repo}`"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh label delete` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &["label", "delete", name, "--repo", repo, "--confirm"],
+            None,
+            &format!("gh label delete {name} --repo {repo}"),
+        )?;
         Ok(())
     }
 
@@ -493,24 +455,17 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
     }
 
     fn delete_ruleset(&self, repo: &str, id: u64) -> anyhow::Result<()> {
-        let out = self
-            .runner
-            .run(
-                &[
-                    "api",
-                    "-X",
-                    "DELETE",
-                    &format!("repos/{repo}/rulesets/{id}"),
-                ],
-                None,
-            )
-            .with_context(|| format!("failed to spawn `gh api DELETE rulesets/{id}` for {repo}"))?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh api DELETE rulesets/{id}` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &[
+                "api",
+                "-X",
+                "DELETE",
+                &format!("repos/{repo}/rulesets/{id}"),
+            ],
+            None,
+            &format!("DELETE repos/{repo}/rulesets/{id}"),
+        )?;
         Ok(())
     }
 
@@ -528,26 +483,17 @@ impl<R: GhRunner> GhRepoClient for GhRepoClientImpl<R> {
     }
 
     fn delete_branch_protection(&self, repo: &str, branch: &str) -> anyhow::Result<()> {
-        let out = self
-            .runner
-            .run(
-                &[
-                    "api",
-                    "-X",
-                    "DELETE",
-                    &format!("repos/{repo}/branches/{branch}/protection"),
-                ],
-                None,
-            )
-            .with_context(|| {
-                format!("failed to spawn `gh api DELETE branch protection` for {repo}/{branch}")
-            })?;
-        if !out.success() {
-            anyhow::bail!(
-                "`gh api DELETE branch protection` failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-        }
+        run_checked(
+            &self.runner,
+            &[
+                "api",
+                "-X",
+                "DELETE",
+                &format!("repos/{repo}/branches/{branch}/protection"),
+            ],
+            None,
+            &format!("DELETE repos/{repo}/branches/{branch}/protection"),
+        )?;
         Ok(())
     }
 
@@ -616,7 +562,7 @@ fn execute_inner(
 ) -> ExitCode {
     // Resolve the effective manifest (upstream fetch + optional local overlay,
     // or just local file when --upstream-manifest is not given).
-    let fetcher = GhFetcher;
+    let fetcher = GhFetcher::new();
     let manifest =
         match upstream_manifest::resolve(effective_upstream_manifest, &args.manifest, &fetcher) {
             Ok(m) => m,
@@ -914,7 +860,7 @@ mod tests {
         let err = c.detect_repo().unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("`gh repo view` failed"));
+        assert!(err.to_string().contains("gh repo view failed"));
     }
 
     // ------------------------------------------------------------------
@@ -953,7 +899,7 @@ mod tests {
         let err = c.fetch_repo("owner/repo").unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("`gh api GET"));
+        assert!(err.to_string().contains("GET repos/owner/repo"));
     }
 
     // ------------------------------------------------------------------
@@ -1025,7 +971,7 @@ mod tests {
         let err = c.fetch_labels("owner/repo").unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("`gh label list` failed"));
+        assert!(err.to_string().contains("gh label list"));
     }
 
     // ------------------------------------------------------------------
@@ -1253,7 +1199,7 @@ mod tests {
         let err = c.fetch_branch_protection("owner/repo", "main").unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("branch protection failed"));
+        assert!(err.to_string().contains("branches/main/protection failed"));
     }
 
     // ------------------------------------------------------------------
@@ -1576,7 +1522,7 @@ mod tests {
             .unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("`gh label create` failed"));
+        assert!(err.to_string().contains("gh label create"));
     }
 
     #[test]
@@ -1803,7 +1749,10 @@ mod tests {
             .unwrap_err();
 
         // Assert
-        assert!(err.to_string().contains("DELETE branch protection"));
+        assert!(
+            err.to_string()
+                .contains("DELETE repos/owner/repo/branches/main/protection")
+        );
     }
 
     // ------------------------------------------------------------------
@@ -1915,10 +1864,7 @@ mod tests {
             .unwrap_err();
 
         // Assert
-        assert!(
-            err.to_string()
-                .contains("`gh api PATCH repos/owner/repo` failed")
-        );
+        assert!(err.to_string().contains("PATCH repos/owner/repo"));
     }
 
     // ------------------------------------------------------------------
