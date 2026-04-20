@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "gh-sync"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "gh-sync-engine"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "console",
@@ -279,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "gh-sync-manifest"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "serde",
