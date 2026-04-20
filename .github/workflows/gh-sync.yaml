@@ -20,13 +20,13 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      issues: write # Required to create and update drift issues
+      issues: write # create and update drift-tracking issues
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: naa0yama/gh-sync@1e2635dbfc27e544c28b82ec6faeffd4450154ff # v0.3.2
+      - uses: naa0yama/gh-sync@923c8824aa5da62d93465d67af2ffe0dba49e9d7 # v0.3.4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           upstream-manifest: naa0yama/boilerplate-rust@main:.github/gh-sync/config.yaml
