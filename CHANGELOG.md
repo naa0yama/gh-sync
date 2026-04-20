@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.3.5](https://github.com/naa0yama/gh-sync/compare/v0.3.4...v0.3.5) - 2026-04-20
+
+### Bug Fixes 🐌
+
+- fix(ci): add explanatory comment to issues: write permission by @naa0yama in https://github.com/naa0yama/gh-sync/pull/66
+
+### Development Environment 🔧
+
+- ci: fix ci-gate condition to suppress false pass on concurrency cancel by @naa0yama in https://github.com/naa0yama/gh-sync/pull/61
+- Update taiki-e/install-action action to v2.75.9 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/63
+- ci: extract cleanup job into standalone workflow by @naa0yama in https://github.com/naa0yama/gh-sync/pull/65
+
 ## [v0.3.4](https://github.com/naa0yama/gh-sync/compare/v0.3.3...v0.3.4) - 2026-04-20
 
 ### Bug Fixes 🐌
