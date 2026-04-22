@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::StrategyResult;
-use super::markers::{merge_marker_blocks, strip_marker_blocks};
+use super::markers::{merge_marker_blocks, select_marker_blocks, strip_marker_blocks};
 
 // ---------------------------------------------------------------------------
 // PatchOutput
@@ -47,10 +47,14 @@ pub trait PatchRunner {
 /// `local` to determine whether a write is needed.
 ///
 /// When `preserve_markers` is `true`, marker blocks enclosed by
-/// `gh-sync:keep-start` / `gh-sync:keep-end` comments are stripped from
-/// `local` before comparison so they are excluded from drift detection.
-/// If the patched result differs from the stripped local, the marker blocks
-/// are merged back into the patched content before it is returned.
+/// `gh-sync:keep-start` / `gh-sync:keep-end` comments are stripped from both
+/// `upstream` and `local` before the patch is applied and before drift
+/// comparison, so marker content is excluded from drift detection.
+/// When the patched result is written back, the marker blocks to re-insert
+/// are chosen by [`select_marker_blocks`]: local blocks are used when present;
+/// otherwise the upstream marker blocks are propagated so that a downstream
+/// file that has never had markers receives the upstream marker structure on
+/// the first sync.
 pub fn apply(
     upstream: &[u8],
     local: Option<&[u8]>,
@@ -59,8 +63,8 @@ pub fn apply(
     preserve_markers: bool,
 ) -> StrategyResult {
     if preserve_markers {
-        let upstream_stripped = match strip_marker_blocks(upstream) {
-            Ok((s, _)) => s,
+        let (upstream_stripped, upstream_blocks) = match strip_marker_blocks(upstream) {
+            Ok(pair) => pair,
             Err(e) => {
                 return StrategyResult::Error(format!("invalid marker block (upstream): {e}"));
             }
@@ -70,16 +74,18 @@ pub fn apply(
             Ok(PatchOutput::Conflict(message)) => return StrategyResult::Conflict { message },
             Err(e) => return StrategyResult::Error(e.to_string()),
         };
-        let (local_stripped, marker_blocks) = match local.map(strip_marker_blocks).transpose() {
-            Ok(Some((s, b))) => (Some(s), b),
-            Ok(None) => (None, vec![]),
+        let local_blocks = match local.map(strip_marker_blocks).transpose() {
+            Ok(Some((_, b))) => b,
+            Ok(None) => vec![],
             Err(e) => return StrategyResult::Error(format!("invalid marker block (local): {e}")),
         };
-        if local_stripped.as_deref() == Some(patched.as_slice()) {
+        let marker_blocks = select_marker_blocks(upstream_blocks, local_blocks);
+        let final_content = merge_marker_blocks(&patched, &marker_blocks);
+        if local == Some(final_content.as_slice()) {
             StrategyResult::Unchanged
         } else {
             StrategyResult::Changed {
-                content: merge_marker_blocks(&patched, &marker_blocks),
+                content: final_content,
             }
         }
     } else {
@@ -235,6 +241,42 @@ mod tests {
             matches!(result, StrategyResult::Conflict { ref message }
                 if message == "hunk 1 failed to apply"),
             "expected Conflict when runner returns Conflict"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // apply() — preserve_markers with upstream marker propagation
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn preserve_markers_upstream_markers_propagated_when_local_none() {
+        // upstream has a marker block; patched result has none; local is None.
+        // Expected: Changed with upstream markers inserted into the patched output.
+        let upstream = b"a = 1\n# gh-sync:keep-start\nb = upstream\n# gh-sync:keep-end\n";
+        // strip upstream markers before patching (mirrors the real behaviour)
+        let patched_content = b"a = 1\n".to_vec();
+        let runner = MockPatchRunner::success(patched_content);
+        let result = apply(upstream, None, Path::new("x.patch"), &runner, true);
+        let expected = b"a = 1\n# gh-sync:keep-start\nb = upstream\n# gh-sync:keep-end\n";
+        assert!(
+            matches!(result, StrategyResult::Changed { ref content } if content.as_slice() == expected),
+            "expected Changed with upstream markers propagated: {result:?}"
+        );
+    }
+
+    #[test]
+    fn preserve_markers_upstream_markers_propagated_when_local_has_no_markers() {
+        // upstream has markers; local has no markers; patched == stripped local.
+        // Expected: Changed because marker blocks need to be inserted.
+        let upstream = b"a = 1\n# gh-sync:keep-start\nb = upstream\n# gh-sync:keep-end\n";
+        let local = b"a = 1\n";
+        // patched equals local stripped (no diff outside markers)
+        let runner = MockPatchRunner::success(b"a = 1\n".to_vec());
+        let result = apply(upstream, Some(local), Path::new("x.patch"), &runner, true);
+        let expected = b"a = 1\n# gh-sync:keep-start\nb = upstream\n# gh-sync:keep-end\n";
+        assert!(
+            matches!(result, StrategyResult::Changed { ref content } if content.as_slice() == expected),
+            "expected Changed with upstream markers inserted: {result:?}"
         );
     }
 

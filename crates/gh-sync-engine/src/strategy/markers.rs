@@ -101,6 +101,24 @@ pub fn strip_marker_blocks(bytes: &[u8]) -> Result<(Vec<u8>, Vec<MarkerBlock>), 
     Ok((output, blocks))
 }
 
+/// Choose which marker blocks to use when merging.
+///
+/// Returns `local_blocks` when it is non-empty (downstream has its own
+/// customisations), otherwise falls back to `upstream_blocks` so that the
+/// upstream template markers are propagated to a downstream that has not yet
+/// added any markers of its own.
+#[must_use]
+pub fn select_marker_blocks(
+    upstream_blocks: Vec<MarkerBlock>,
+    local_blocks: Vec<MarkerBlock>,
+) -> Vec<MarkerBlock> {
+    if local_blocks.is_empty() {
+        upstream_blocks
+    } else {
+        local_blocks
+    }
+}
+
 /// Reinsert extracted marker blocks into stripped bytes.
 ///
 /// This is the inverse of [`strip_marker_blocks`]: given the stripped content
@@ -243,6 +261,48 @@ mod tests {
         let input =
             b"# gh-sync:keep-start\n# gh-sync:keep-start\ninner\n# gh-sync:keep-end\n# gh-sync:keep-end\n";
         assert_eq!(strip_marker_blocks(input), Err(MarkerError::Nested));
+    }
+
+    // ------------------------------------------------------------------
+    // select_marker_blocks
+    // ------------------------------------------------------------------
+
+    fn make_block(position: usize, content: &[u8]) -> MarkerBlock {
+        MarkerBlock {
+            position,
+            content: content.to_vec(),
+        }
+    }
+
+    #[test]
+    fn select_local_empty_returns_upstream() {
+        let upstream = vec![make_block(
+            0,
+            b"# gh-sync:keep-start\na\n# gh-sync:keep-end\n",
+        )];
+        let local: Vec<MarkerBlock> = vec![];
+        let result = select_marker_blocks(upstream.clone(), local);
+        assert_eq!(result, upstream);
+    }
+
+    #[test]
+    fn select_local_non_empty_returns_local() {
+        let upstream = vec![make_block(
+            0,
+            b"# gh-sync:keep-start\nupstream\n# gh-sync:keep-end\n",
+        )];
+        let local = vec![make_block(
+            0,
+            b"# gh-sync:keep-start\nlocal\n# gh-sync:keep-end\n",
+        )];
+        let result = select_marker_blocks(upstream, local.clone());
+        assert_eq!(result, local);
+    }
+
+    #[test]
+    fn select_both_empty_returns_empty() {
+        let result = select_marker_blocks(vec![], vec![]);
+        assert!(result.is_empty());
     }
 
     // ------------------------------------------------------------------
