@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.3.6](https://github.com/naa0yama/gh-sync/compare/v0.3.5...v0.3.6) - 2026-04-22
+
+### Bug Fixes 🐌
+
+- fix(engine): propagate upstream markers to downstream on first sync by @naa0yama in https://github.com/naa0yama/gh-sync/pull/79
+
+### Development Environment 🔧
+
+- build: bump github:naa0yama/gh-sync to v0.3.5 by @naa0yama in https://github.com/naa0yama/gh-sync/pull/67
+- chore(deps): update actions/cache action to v5.0.5 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/69
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/70
+- chore(deps): update zizmorcore/zizmor-action action to v0.5.3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/72
+- chore(deps): update dependency aqua:embarkstudios/cargo-deny to v0.19.2 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/73
+- chore(deps): update rust docker tag to v1.94.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/74
+- chore(deps): update taiki-e/install-action action to v2.75.11 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/76
+- chore(deps): update taiki-e/install-action action to v2.75.12 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/77
+- chore(deps): update taiki-e/install-action action to v2.75.13 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/78
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/80
+- chore(deps): update dependency aqua:embarkstudios/cargo-deny to v0.19.4 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/81
+
 ## [v0.3.5](https://github.com/naa0yama/gh-sync/compare/v0.3.4...v0.3.5) - 2026-04-20
 
 ### Bug Fixes 🐌
