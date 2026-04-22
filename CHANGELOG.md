@@ -1,9 +1,13 @@
 # Changelog
 
 ## [v0.3.6](https://github.com/naa0yama/gh-sync/compare/v0.3.5...v0.3.6) - 2026-04-22
+
 ### Bug Fixes 🐌
+
 - fix(engine): propagate upstream markers to downstream on first sync by @naa0yama in https://github.com/naa0yama/gh-sync/pull/79
+
 ### Development Environment 🔧
+
 - build: bump github:naa0yama/gh-sync to v0.3.5 by @naa0yama in https://github.com/naa0yama/gh-sync/pull/67
 - chore(deps): update actions/cache action to v5.0.5 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/69
 - chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/70
