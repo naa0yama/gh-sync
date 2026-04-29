@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.3.7](https://github.com/naa0yama/gh-sync/compare/v0.3.6...v0.3.7) - 2026-04-29
+### Dependency Updates 📦
+- chore(deps): update rust crate assert_cmd to v2.2.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/89
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/92
+- chore(deps): update rust crate similar to v3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/18
+### Development Environment 🔧
+- chore(deps): update taiki-e/install-action action to v2.75.15 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/82
+- Delete .github/workflows/gh-sync.yaml by @naa0yama in https://github.com/naa0yama/gh-sync/pull/84
+- chore(deps): update devcontainers/ci action to v0.3.1900000448 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/86
+- chore(deps): update taiki-e/install-action action to v2.75.16 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/87
+- chore(deps): update devcontainers/ci action to v0.3.1900000449 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/88
+- chore(deps): update taiki-e/install-action action to v2.75.17 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/90
+- chore(deps): update taiki-e/install-action action to v2.75.18 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/91
+- chore(deps): update taiki-e/install-action action to v2.75.19 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/93
+- chore(deps): update dependency usage to v3.2.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/94
+- chore(deps): update dependency ghalint to v1.5.5 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/96
+- chore(deps): update dependency zizmor to v1.16.3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/97
+- chore(deps): update dependency zizmor to v1.24.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/98
+- chore(deps): update dependency aqua:cli/cli to v2.91.0 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/85
+- chore: backport boilerplate-rust infrastructure changes by @naa0yama in https://github.com/naa0yama/gh-sync/pull/95
+
 ## [v0.3.6](https://github.com/naa0yama/gh-sync/compare/v0.3.5...v0.3.6) - 2026-04-22
 
 ### Bug Fixes 🐌
