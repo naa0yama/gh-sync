@@ -1,11 +1,15 @@
 # Changelog
 
 ## [v0.3.7](https://github.com/naa0yama/gh-sync/compare/v0.3.6...v0.3.7) - 2026-04-29
+
 ### Dependency Updates 📦
+
 - chore(deps): update rust crate assert_cmd to v2.2.1 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/89
 - chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/92
 - chore(deps): update rust crate similar to v3 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/18
+
 ### Development Environment 🔧
+
 - chore(deps): update taiki-e/install-action action to v2.75.15 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/82
 - Delete .github/workflows/gh-sync.yaml by @naa0yama in https://github.com/naa0yama/gh-sync/pull/84
 - chore(deps): update devcontainers/ci action to v0.3.1900000448 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/86
