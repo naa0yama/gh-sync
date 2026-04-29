@@ -28,6 +28,9 @@ repository = "https://github.com/naa0yama/boilerplate-rust"
 gh-sync-engine = { path = "crates/gh-sync-engine" }
 gh-sync-manifest = { path = "crates/gh-sync-manifest" }
 
+## Core
+clap = { version = "4.5.45", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "color", "suggestions"] }
+
 ## Data
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.137"
@@ -42,7 +45,6 @@ similar = "3.0"
 
 ## Core
 anyhow = "1.0"
-clap = { version = "4.5.45", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "color", "suggestions"] }
 
 ## Logging
 tracing = "0.1.41"
@@ -54,6 +56,9 @@ sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 ## OpenTelemetry semantic conventions (optional, behind `process-metrics` feature)
 ## semconv_experimental: enables process.* metric name constants (currently experimental)
 opentelemetry-semantic-conventions = { version = "0.31", default-features = false, features = ["semconv_experimental"] }
+
+## Hostname (optional, behind `otel` feature)
+gethostname = "1.1.0"
 
 ## OpenTelemetry (optional, behind `otel` feature)
 opentelemetry = { version = "0.31", default-features = false, features = ["trace", "metrics", "logs"] }

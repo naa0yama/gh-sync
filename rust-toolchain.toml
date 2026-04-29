@@ -1,5 +1,6 @@
 [toolchain]
 channel = "1.94.1"
+
 components = [
 	"cargo",
 	"clippy",
