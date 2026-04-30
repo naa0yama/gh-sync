@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.3.8](https://github.com/naa0yama/gh-sync/compare/v0.3.7...v0.3.8) - 2026-04-30
+### Development Environment 🔧
+- chore(deps): update mozilla-actions/sccache-action action to v0.0.10 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/100
+- chore(deps): update dependency jdx/mise to v2026.4.19 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/99
+- chore(deps): update taiki-e/install-action action to v2.75.20 by @renovate[bot] in https://github.com/naa0yama/gh-sync/pull/102
+
 ## [v0.3.7](https://github.com/naa0yama/gh-sync/compare/v0.3.6...v0.3.7) - 2026-04-29
 
 ### Dependency Updates 📦
