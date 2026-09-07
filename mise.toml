@@ -10,7 +10,7 @@ RUST_LOG = "warn,graft=trace"
 # graft:keep-end
 
 [tools]
-"aqua:ast-grep/ast-grep" = "0.45.2"
+"aqua:ast-grep/ast-grep" = "0.45.3"
 "aqua:cli/cli" = "2.98.0"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "aqua:taiki-e/cargo-llvm-cov" = "0.9.0"
