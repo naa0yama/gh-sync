@@ -2,6 +2,169 @@
 
 ## What's Changed
 
+### Dependency Updates 📦
+
+- chore(deps): update rust crate similar to v3.2.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/379
+
+### Development Environment 🔧
+
+- chore(deps): update taiki-e/install-action action to v2.82.9 by @renovate[bot] in https://github.com/naa0yama/graft/pull/259
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/260
+- chore(deps): update dependency usage to v3.5.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/262
+- chore(deps): update taiki-e/install-action action to v2.82.10 by @renovate[bot] in https://github.com/naa0yama/graft/pull/263
+- chore(deps): update dependency jdx/mise to v2026.7.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/264
+- chore(deps): update dependency jdx/mise to v2026.7.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/265
+- chore(deps): update github/codeql-action action to v4.37.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/266
+- chore(deps): update dependency jdx/mise to v2026.7.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/267
+- chore(deps): update taiki-e/install-action action to v2.82.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/268
+- chore(deps): update actions/labeler action to v6.2.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/270
+- chore(deps): update taiki-e/install-action action to v2.83.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/273
+- chore(deps): update dependency aqua:embarkstudios/cargo-deny to v0.20.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/272
+- chore(deps): update dependency jdx/mise to v2026.7.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/271
+- chore(deps): update taiki-e/install-action action to v2.83.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/274
+- chore(deps): update dependency github:naa0yama/graft to v0.5.10 by @renovate[bot] in https://github.com/naa0yama/graft/pull/275
+- chore(deps): update dependency github:naa0yama/graft to v0.5.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/276
+- chore(deps): update taiki-e/install-action action to v2.83.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/277
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/278
+- chore(deps): update dependency zizmor to v1.27.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/279
+- chore(deps): update dependency usage to v3.5.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/282
+- chore(deps): update dependency dprint to v0.55.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/283
+- chore(deps): update dependency jdx/mise to v2026.7.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/281
+- chore(deps): update zizmorcore/zizmor-action action to v0.6.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/284
+- chore(deps): update dependency jdx/mise to v2026.7.7 by @renovate[bot] in https://github.com/naa0yama/graft/pull/280
+- chore(deps): update dependency jdx/mise to v2026.7.7 by @renovate[bot] in https://github.com/naa0yama/graft/pull/285
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/286
+- chore(deps): update jdx/mise-action action to v4.2.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/288
+- chore(deps): update dependency openobserve/openobserve to v0.91.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/289
+- chore(deps): update taiki-e/install-action action to v2.83.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/290
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/291
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/292
+- chore(deps): update dependency jdx/mise to v2026.7.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/293
+- chore(deps): update dependency jdx/mise to v2026.7.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/294
+- chore(deps): update dependency usage to v3.5.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/295
+- chore(deps): update github/codeql-action action to v4.37.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/296
+- chore(deps): update dependency openobserve/openobserve to v0.91.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/297
+- chore(deps): update dependency zizmor to v1.28.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/298
+- chore(deps): update github/codeql-action action to v4.37.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/299
+- chore(deps): update taiki-e/install-action action to v2.84.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/300
+- chore(deps): update dependency jdx/mise to v2026.7.12 by @renovate[bot] in https://github.com/naa0yama/graft/pull/302
+- chore(deps): update dependency cargo:cargo-nextest to v0.9.140 by @renovate[bot] in https://github.com/naa0yama/graft/pull/303
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/304
+- chore(deps): update dependency aqua:ast-grep/ast-grep to v0.45.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/305
+- chore(deps): update zizmorcore/zizmor-action action to v0.6.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/306
+- chore(deps): update jdx/mise-action action to v4.2.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/307
+- chore(deps): update docker/login-action action to v4.5.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/308
+- chore(deps): update dependency jdx/mise to v2026.7.13 by @renovate[bot] in https://github.com/naa0yama/graft/pull/309
+- chore(deps): update jdx/mise-action action to v4.2.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/310
+- chore(deps): update taiki-e/install-action action to v2.85.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/311
+- chore(deps): update dependency usage to v3.6.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/313
+- chore(deps): update taiki-e/install-action action to v2.85.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/315
+- chore(deps): update dependency jdx/mise to v2026.7.14 by @renovate[bot] in https://github.com/naa0yama/graft/pull/301
+- chore(deps): update dependency jdx/mise to v2026.7.14 by @renovate[bot] in https://github.com/naa0yama/graft/pull/316
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/317
+- chore(deps): update dependency openobserve/openobserve to v0.91.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/318
+- chore(deps): update k1low/octocov-action action to v1.5.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/319
+- chore(deps): update dependency jdx/mise to v2026.7.15 by @renovate[bot] in https://github.com/naa0yama/graft/pull/320
+- chore(deps): update dependency jdx/mise to v2026.7.15 by @renovate[bot] in https://github.com/naa0yama/graft/pull/321
+- chore(deps): update docker/login-action action to v4.5.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/322
+- chore(deps): update taiki-e/install-action action to v2.85.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/323
+- chore(deps): update dependency jdx/mise to v2026.7.16 by @renovate[bot] in https://github.com/naa0yama/graft/pull/324
+- chore(deps): update dependency jdx/mise to v2026.7.16 by @renovate[bot] in https://github.com/naa0yama/graft/pull/325
+- chore(deps): update dependency mozilla/sccache to v0.17.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/326
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/327
+- chore(deps): update taiki-e/install-action action to v2.85.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/328
+- chore(deps): update docker/dockerfile docker tag to v1.26.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/329
+- chore(deps): update dependency jdx/mise to v2026.7.17 by @renovate[bot] in https://github.com/naa0yama/graft/pull/330
+- chore(deps): update dependency jdx/mise to v2026.7.17 by @renovate[bot] in https://github.com/naa0yama/graft/pull/331
+- chore(deps): update dependency openobserve/openobserve to v0.91.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/332
+- chore(deps): update github/codeql-action action to v4.37.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/333
+- chore(deps): update dependency jdx/mise to v2026.7.18 by @renovate[bot] in https://github.com/naa0yama/graft/pull/335
+- chore(deps): update dependency jdx/mise to v2026.7.18 by @renovate[bot] in https://github.com/naa0yama/graft/pull/336
+- chore(deps): update taiki-e/install-action action to v2.85.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/334
+- chore(deps): update dependency aqua:cli/cli to v2.97.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/337
+- chore(deps): update jdx/mise-action action to v4.2.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/338
+- chore(deps): update taiki-e/install-action action to v2.85.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/339
+- chore(deps): update zizmorcore/zizmor-action action to v0.6.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/340
+- chore(deps): update dependency jdx/mise to v2026.8.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/342
+- chore(deps): update dependency zizmor to v1.29.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/343
+- chore(deps): update taiki-e/install-action action to v2.85.7 by @renovate[bot] in https://github.com/naa0yama/graft/pull/344
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/345
+- chore(deps): update github/codeql-action action to v4.37.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/346
+- chore(deps): update dependency jdx/mise to v2026.8.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/347
+- chore(deps): update dependency jdx/mise to v2026.8.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/348
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/349
+- chore(deps): update dependency cargo:cargo-nextest to v0.9.143 by @renovate[bot] in https://github.com/naa0yama/graft/pull/350
+- chore(deps): update dependency jdx/mise to v2026.8.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/353
+- chore(deps): update taiki-e/install-action action to v2.85.9 by @renovate[bot] in https://github.com/naa0yama/graft/pull/354
+- chore(deps): update actions/attest-build-provenance action to v4.2.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/355
+- chore(deps): update dependency aqua:ast-grep/ast-grep to v0.45.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/356
+- chore(deps): update taiki-e/install-action action to v2.85.10 by @renovate[bot] in https://github.com/naa0yama/graft/pull/357
+- chore(deps): update dependency openobserve/openobserve to v0.92.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/358
+- chore(deps): update dependency jdx/mise to v2026.8.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/352
+- chore(deps): update taiki-e/install-action action to v2.85.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/360
+- chore(deps): update dependency jdx/mise to v2026.8.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/359
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/361
+- chore(deps): update dependency jdx/mise to v2026.8.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/362
+- chore(deps): update dependency jdx/mise to v2026.8.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/363
+- chore(deps): update dependency rui314/mold to v2.42.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/364
+- chore(deps): update dependency jdx/mise to v2026.8.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/365
+- chore(deps): update taiki-e/install-action action to v2.85.12 by @renovate[bot] in https://github.com/naa0yama/graft/pull/367
+- chore(deps): update dependency jdx/mise to v2026.8.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/366
+- chore(deps): update jdx/mise-action action to v4.2.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/368
+- chore(deps): update github/codeql-action action to v4.37.7 by @renovate[bot] in https://github.com/naa0yama/graft/pull/369
+- chore(deps): update taiki-e/install-action action to v2.85.13 by @renovate[bot] in https://github.com/naa0yama/graft/pull/370
+- chore(deps): update dependency openobserve/openobserve to v0.92.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/371
+- chore(deps): update dependency jdx/mise to v2026.8.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/372
+- chore(deps): update dependency jdx/mise to v2026.8.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/373
+- chore(deps): update taiki-e/install-action action to v2.85.14 by @renovate[bot] in https://github.com/naa0yama/graft/pull/374
+- chore(deps): update taiki-e/install-action action to v2.86.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/375
+- chore(deps): update taiki-e/install-action action to v2.86.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/376
+- chore(deps): update dependency aqua:taiki-e/cargo-llvm-cov to v0.9.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/377
+- chore(deps): update taiki-e/install-action action to v2.86.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/378
+- chore(deps): update dependency jdx/mise to v2026.8.8 by @renovate[bot] in https://github.com/naa0yama/graft/pull/381
+- chore(deps): update dependency openobserve/openobserve to v0.92.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/382
+- chore(deps): update taiki-e/install-action action to v2.86.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/383
+- chore(deps): update dependency dprint to v0.56.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/384
+- chore(deps): update dependency jdx/mise to v2026.8.9 by @renovate[bot] in https://github.com/naa0yama/graft/pull/380
+- chore(deps): update dependency jdx/mise to v2026.8.9 by @renovate[bot] in https://github.com/naa0yama/graft/pull/385
+- chore(deps): update taiki-e/install-action action to v2.86.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/386
+- chore(deps): update dependency jdx/mise to v2026.8.10 by @renovate[bot] in https://github.com/naa0yama/graft/pull/388
+- chore(deps): update dependency aqua:cli/cli to v2.98.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/389
+- chore(deps): update github/codeql-action action to v4.37.8 by @renovate[bot] in https://github.com/naa0yama/graft/pull/390
+- chore(deps): update dependency dprint to v0.56.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/391
+- chore(deps): update taiki-e/install-action action to v2.86.5 by @renovate[bot] in https://github.com/naa0yama/graft/pull/392
+- chore(deps): update taiki-e/install-action action to v2.86.6 by @renovate[bot] in https://github.com/naa0yama/graft/pull/394
+- chore(deps): update dependency jdx/mise to v2026.8.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/387
+- chore(deps): update dependency jdx/mise to v2026.8.11 by @renovate[bot] in https://github.com/naa0yama/graft/pull/395
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/396
+- chore(deps): update dependency aqua:ast-grep/ast-grep to v0.45.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/397
+- chore(deps): update dependency jdx/mise to v2026.8.12 by @renovate[bot] in https://github.com/naa0yama/graft/pull/399
+- chore(deps): update taiki-e/install-action action to v2.86.7 by @renovate[bot] in https://github.com/naa0yama/graft/pull/400
+- chore(deps): update jdx/mise-action action to v4.3.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/401
+- chore(deps): update dependency jdx/mise to v2026.8.14 by @renovate[bot] in https://github.com/naa0yama/graft/pull/402
+- chore(deps): update all action update by @renovate[bot] in https://github.com/naa0yama/graft/pull/403
+- chore(deps): update taiki-e/install-action action to v2.87.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/404
+- chore(deps): update taiki-e/install-action action to v2.87.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/405
+- chore(deps): update taiki-e/install-action action to v2.87.2 by @renovate[bot] in https://github.com/naa0yama/graft/pull/406
+- chore(deps): lock file maintenance by @renovate[bot] in https://github.com/naa0yama/graft/pull/407
+- chore(deps): update dependency dprint to v0.57.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/408
+- chore(deps): update dependency jdx/mise to v2026.8.15 by @renovate[bot] in https://github.com/naa0yama/graft/pull/409
+- chore(deps): update zizmorcore/zizmor-action action to v0.6.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/410
+- chore(deps): update dependency zizmor to v1.30.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/411
+- chore(deps): update dependency aqua:ast-grep/ast-grep to v0.45.3 by @renovate[bot] in https://github.com/naa0yama/graft/pull/412
+- chore(deps): update dependency jdx/mise to v2026.8.16 by @renovate[bot] in https://github.com/naa0yama/graft/pull/398
+- chore(deps): update dependency jdx/mise to v2026.8.16 by @renovate[bot] in https://github.com/naa0yama/graft/pull/413
+- chore(deps): update dependency jdx/mise to v2026.9.1 by @renovate[bot] in https://github.com/naa0yama/graft/pull/415
+- chore(deps): update dependency aqua:cli/cli to v2.99.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/417
+- chore(deps): update taiki-e/install-action action to v2.87.4 by @renovate[bot] in https://github.com/naa0yama/graft/pull/416
+- chore(deps): update docker/dockerfile docker tag to v1.27.0 by @renovate[bot] in https://github.com/naa0yama/graft/pull/418
+
+**Full Changelog**: https://github.com/naa0yama/graft/compare/v0.5.11...v0.5.12
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+
 ### Features 🎉
 
 - feat(denv): pre-pull base image before devcontainer up by @naa0yama in https://github.com/naa0yama/graft/pull/256
